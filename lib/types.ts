@@ -30,6 +30,16 @@ export interface OrderItem {
   qty: number;
 }
 
+export interface Review {
+  id: string;
+  productId: string;
+  orderId: string;
+  customerName: string;
+  rating: number; // 1-5
+  comment: string;
+  createdAt: string;
+}
+
 export type PaymentMethod = "stripe" | "zelle";
 
 /**
@@ -72,6 +82,10 @@ export interface Order {
   shippedAt?: string;
   /** Shipping fee in USD (0 = free shipping). */
   shippingUSD?: number;
+  /** After-sales / return request (customer-facing). */
+  returnRequested?: boolean;
+  returnReason?: string;
+  returnStatus?: "none" | "requested" | "approved" | "rejected" | "refunded";
   /** Internal admin note (not shown to customer). */
   note?: string;
 }

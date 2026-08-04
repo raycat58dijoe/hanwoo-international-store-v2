@@ -43,6 +43,19 @@ export async function POST(
     return NextResponse.json({ order: updated });
   }
 
+  // Customer submits an after-sales / return request (delivered orders).
+  if (body.returnRequested) {
+    if (order.status !== "delivered") {
+      return NextResponse.json({ error: "Returns can only be requested for delivered orders." }, { status: 400 });
+    }
+    const updated = await updateOrder(order.id, {
+      returnRequested: true,
+      returnReason: typeof body.returnReason === "string" ? body.returnReason.slice(0, 500) : "",
+      returnStatus: "requested",
+    });
+    return NextResponse.json({ order: updated });
+  }
+
   if (body.sessionId && stripe) {
     const session = await stripe.checkout.sessions.retrieve(body.sessionId);
     if (session.payment_status === "paid") {
@@ -55,7 +68,7 @@ export async function POST(
   return NextResponse.json({ order });
 }
 
-// Admin: update fulfillment — status, tracking, note.
+// Admin: update fulfillment — status, tracking, note, after-sales handling.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -71,6 +84,9 @@ export async function PATCH(
   if (typeof body.trackingNumber === "string") patch.trackingNumber = body.trackingNumber;
   if (typeof body.trackingUrl === "string") patch.trackingUrl = body.trackingUrl;
   if (typeof body.note === "string") patch.note = body.note;
+  if (typeof body.returnRequested === "boolean") patch.returnRequested = body.returnRequested;
+  if (typeof body.returnReason === "string") patch.returnReason = body.returnReason;
+  if (typeof body.returnStatus === "string") patch.returnStatus = body.returnStatus;
 
   // When marking shipped, stamp the timestamp (unless explicitly cleared)
   if (body.status === "shipped" && body.shippedAt === undefined) {

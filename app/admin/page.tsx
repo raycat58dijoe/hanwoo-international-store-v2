@@ -210,6 +210,11 @@ export default function AdminPage() {
     else setMsg("Delete failed: " + (await res.json()).error);
   }
 
+  async function handleReturn(id: string, status: string) {
+    const ok = await patchOrder(id, { returnStatus: status });
+    if (ok) setMsg(`Return ${status}.`);
+  }
+
   // ---------- dashboard stats ----------
   const totalOrders = orders.length;
   const revenue = orders
@@ -820,6 +825,30 @@ export default function AdminPage() {
                           value={sf.url}
                           onChange={(e) => setShipForm((s) => ({ ...s, [o.id]: { ...sf, url: e.target.value } }))}
                         />
+                      </div>
+                    )}
+
+                    {/* After-sales handling */}
+                    {o.returnRequested && (
+                      <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase text-orange-700">Return / after-sales</span>
+                          <span className="text-xs text-orange-600">
+                            {o.returnStatus === "requested" ? "Pending" : o.returnStatus === "approved" ? "Approved" : o.returnStatus === "rejected" ? "Declined" : o.returnStatus === "refunded" ? "Refunded" : ""}
+                          </span>
+                        </div>
+                        {o.returnReason && <p className="mt-1 text-xs text-orange-800">{o.returnReason}</p>}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {(o.returnStatus === "requested" || o.returnStatus === "none") && (
+                            <>
+                              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => handleReturn(o.id, "approved")}>Approve</button>
+                              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => handleReturn(o.id, "rejected")}>Decline</button>
+                            </>
+                          )}
+                          {o.returnStatus === "approved" && (
+                            <button className="btn-primary px-2.5 py-1 text-xs" onClick={() => handleReturn(o.id, "refunded")}>Mark refunded</button>
+                          )}
+                        </div>
                       </div>
                     )}
 

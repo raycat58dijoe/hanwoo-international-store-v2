@@ -1,6 +1,6 @@
 import { SEED_PRODUCTS } from "./seed";
 import { queryWithSchema } from "./neon-client";
-import type { Order, Product } from "./types";
+import type { Order, Product, Review } from "./types";
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
 const USE_DB = Boolean(CONNECTION_STRING);
@@ -8,6 +8,7 @@ const USE_DB = Boolean(CONNECTION_STRING);
 /* ---------- in-memory store (always available) ---------- */
 let memProducts: Product[] | null = null;
 let memOrders: Order[] = [];
+let memReviews: Review[] = [];
 
 function memEnsure(): Product[] {
   if (!memProducts) memProducts = SEED_PRODUCTS.map((p) => ({ ...p, images: [...p.images] }));
@@ -46,6 +47,9 @@ function rowToOrder(r: any): Order {
     trackingUrl: r.tracking_url ?? undefined,
     shippedAt: r.shipped_at ?? undefined,
     shippingUSD: r.shipping_usd != null ? Number(r.shipping_usd) : undefined,
+    returnRequested: Boolean(r.return_requested),
+    returnReason: r.return_reason ?? undefined,
+    returnStatus: (r.return_status as Order["returnStatus"]) ?? "none",
     note: r.note ?? undefined,
   };
 }
@@ -159,6 +163,9 @@ export async function updateOrder(id: string, patch: Partial<Order>): Promise<Or
     if (patch.trackingUrl !== undefined) { sets.push("tracking_url=$" + n++); vals.push(patch.trackingUrl); }
     if (patch.shippedAt !== undefined) { sets.push("shipped_at=$" + n++); vals.push(patch.shippedAt); }
     if (patch.note !== undefined) { sets.push("note=$" + n++); vals.push(patch.note); }
+    if (patch.returnRequested !== undefined) { sets.push("return_requested=$" + n++); vals.push(patch.returnRequested); }
+    if (patch.returnReason !== undefined) { sets.push("return_reason=$" + n++); vals.push(patch.returnReason); }
+    if (patch.returnStatus !== undefined) { sets.push("return_status=$" + n++); vals.push(patch.returnStatus); }
     if (sets.length === 0) return getOrder(id);
     await neon.queryWithSchema("UPDATE orders SET " + sets.join(",") + " WHERE id=$" + n, [...vals, id]);
     return getOrder(id);
@@ -212,6 +219,58 @@ export async function deleteOrder(id: string): Promise<boolean> {
     const i = memOrders.findIndex((o) => o.id === id);
     if (i >= 0) { memOrders.splice(i, 1); return true; }
     return false;
+  }
+}
+
+/* ---------- reviews ---------- */
+export async function addReview(r: Review): Promise<Review> {
+  const neon = await getNeon();
+  if (!neon) { memReviews.push(r); return r; }
+  try {
+    await neon.queryWithSchema(
+      `INSERT INTO reviews (id,product_id,order_id,customer_name,rating,comment,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [r.id, r.productId, r.orderId, r.customerName, r.rating, r.comment, r.createdAt]
+    );
+    return r;
+  } catch (e: any) {
+    console.error("[addReview] failed:", e?.message);
+    memReviews.push(r);
+    return r;
+  }
+}
+
+export async function getReviewsByProduct(productId: string): Promise<Review[]> {
+  const neon = await getNeon();
+  if (!neon) return memReviews.filter((r) => r.productId === productId);
+  try {
+    const rows = await neon.queryWithSchema("SELECT * FROM reviews WHERE product_id = $1 ORDER BY created_at DESC", [productId]);
+    return rows.map((r: any) => ({ id: r.id, productId: r.product_id, orderId: r.order_id, customerName: r.customer_name, rating: Number(r.rating), comment: r.comment, createdAt: r.created_at }));
+  } catch {
+    return memReviews.filter((r) => r.productId === productId);
+  }
+}
+
+/** Whether this order/product pair already has a review (prevents duplicates). */
+export async function hasReview(orderId: string, productId: string): Promise<boolean> {
+  const neon = await getNeon();
+  if (!neon) return memReviews.some((r) => r.orderId === orderId && r.productId === productId);
+  try {
+    const rows = await neon.queryWithSchema("SELECT id FROM reviews WHERE order_id = $1 AND product_id = $2 LIMIT 1", [orderId, productId]);
+    return rows.length > 0;
+  } catch {
+    return memReviews.some((r) => r.orderId === orderId && r.productId === productId);
+  }
+}
+
+/** All reviews written for a given order (used by the customer center). */
+export async function getReviewsByOrder(orderId: string): Promise<Review[]> {
+  const neon = await getNeon();
+  if (!neon) return memReviews.filter((r) => r.orderId === orderId);
+  try {
+    const rows = await neon.queryWithSchema("SELECT * FROM reviews WHERE order_id = $1", [orderId]);
+    return rows.map((r: any) => ({ id: r.id, productId: r.product_id, orderId: r.order_id, customerName: r.customer_name, rating: Number(r.rating), comment: r.comment, createdAt: r.created_at }));
+  } catch {
+    return memReviews.filter((r) => r.orderId === orderId);
   }
 }
 

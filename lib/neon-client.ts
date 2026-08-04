@@ -78,6 +78,20 @@ function ensureSchema(): Promise<void> {
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TEXT`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_usd NUMERIC(10,2) DEFAULT 0`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS note TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS return_requested BOOLEAN DEFAULT FALSE`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS return_reason TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS return_status TEXT DEFAULT 'none'`);
+
+      // Product reviews (one review per order × product)
+      await query(`CREATE TABLE IF NOT EXISTS reviews (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        order_id TEXT NOT NULL,
+        customer_name TEXT DEFAULT '',
+        rating INTEGER NOT NULL,
+        comment TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+      )`);
 
       // Dynamic import of seed to avoid circular deps
       const { SEED_PRODUCTS } = await import("./seed");

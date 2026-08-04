@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Product } from "@/lib/types";
+import type { Product, Review } from "@/lib/types";
 import { useI18n } from "./I18nProvider";
 import { useCart } from "./CartProvider";
 import { formatMoney } from "@/lib/currency";
@@ -13,9 +13,18 @@ export function ProductView({ product }: { product: Product }) {
   const router = useRouter();
   const [active, setActive] = useState(0);
   const [qty, setQty] = useState(1);
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/reviews?productId=${product.id}`)
+      .then((r) => r.json())
+      .then((d) => setReviews(d.reviews ?? []))
+      .catch(() => {});
+  }, [product.id]);
 
   const name = product.name[locale];
   const desc = product.description[locale];
+  const avg = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
 
   return (
     <div className="container-page py-6">
@@ -65,14 +74,16 @@ export function ProductView({ product }: { product: Product }) {
             {name}
           </h1>
 
-          {/* Rating placeholder */}
+          {/* Rating — real reviews */}
           <div className="mt-2 flex items-center gap-1">
             {[...Array(5)].map((_, i) => (
-              <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1">
+              <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < Math.round(avg) ? "#f59e0b" : "#d1d5db"} stroke={i < Math.round(avg) ? "#f59e0b" : "#d1d5db"} strokeWidth="1">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             ))}
-            <span className="ml-1 text-xs text-[var(--fg-muted)]">(5.0)</span>
+            <span className="ml-1 text-xs text-[var(--fg-muted)]">
+              {reviews.length > 0 ? `${avg.toFixed(1)} (${reviews.length} review${reviews.length === 1 ? "" : "s"})` : "No reviews yet"}
+            </span>
           </div>
 
           <div className="mt-4 flex items-center gap-3">
@@ -148,6 +159,38 @@ export function ProductView({ product }: { product: Product }) {
                 : "Out of stock"}
           </p>
         </div>
+      </div>
+
+      {/* Reviews */}
+      <div className="mt-12">
+        <h2 className="text-lg font-bold text-[var(--fg-primary)]">Customer Reviews</h2>
+        {reviews.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--fg-muted)]">
+            No reviews yet. Purchased this product? You can leave a review from your account page after delivery.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {reviews.map((r) => (
+              <div key={r.id} className="rounded-xl border border-[var(--border)] p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-subtle)] text-sm font-bold text-[var(--fg-primary)]">
+                      {r.customerName?.charAt(0)?.toUpperCase() ?? "?"}
+                    </span>
+                    <span className="text-sm font-medium text-[var(--fg-primary)]">{r.customerName}</span>
+                  </div>
+                  <span className="text-xs text-[var(--fg-muted)]">{new Date(r.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="mt-2 flex gap-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <span key={i} className={`text-sm ${i < r.rating ? "text-amber-400" : "text-gray-300"}`}>★</span>
+                  ))}
+                </div>
+                {r.comment && <p className="mt-2 text-sm leading-relaxed text-[var(--fg-secondary)]">{r.comment}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
