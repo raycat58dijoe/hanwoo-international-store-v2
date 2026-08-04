@@ -79,7 +79,14 @@ export async function upsertProduct(p: Product): Promise<Product[]> {
   try {
     await neon.queryWithSchema(`INSERT INTO products (id,slug,name_en,name_zh,description_en,description_zh,price_usd,images,category,inventory,featured,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,name_en=EXCLUDED.name_en,name_zh=EXCLUDED.name_zh,description_en=EXCLUDED.description_en,description_zh=EXCLUDED.description_zh,price_usd=EXCLUDED.price_usd,images=EXCLUDED.images,category=EXCLUDED.category,inventory=EXCLUDED.inventory,featured=EXCLUDED.featured,active=EXCLUDED.active`, [p.id, p.slug, p.name.en, p.name.zh, p.description.en, p.description.zh, p.priceUSD, JSON.stringify(p.images), p.category, p.inventory, p.featured, p.active]);
     return getAllProducts();
-  } catch { return upsertProduct(p); }
+  } catch (e: any) {
+    console.error("[upsertProduct] failed:", e?.message);
+    // No recursion: fall back to in-memory only for this call.
+    const list = memEnsure();
+    const i = list.findIndex((x) => x.id === p.id);
+    if (i >= 0) list[i] = p; else list.push(p);
+    return list;
+  }
 }
 export async function deleteProduct(id: string): Promise<Product[]> {
   const neon = await getNeon();
@@ -160,9 +167,13 @@ export async function markOrderPaid(id: string, sessionId?: string): Promise<Ord
   }
   // Decrement stock for each line item (best-effort; skip missing products).
   for (const it of current.items) {
-    const p = await getProductById(it.productId);
-    if (p) {
-      await upsertProduct({ ...p, inventory: Math.max(0, p.inventory - it.qty) });
+    try {
+      const p = await getProductById(it.productId);
+      if (p) {
+        await upsertProduct({ ...p, inventory: Math.max(0, p.inventory - it.qty) });
+      }
+    } catch (e: any) {
+      console.error("[markOrderPaid] inventory decrement failed for", it.productId, e?.message);
     }
   }
   return updateOrder(id, sessionId ? { status: "paid", stripeSessionId: sessionId } : { status: "paid" });
