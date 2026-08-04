@@ -9,23 +9,32 @@ const CONN_STR = process.env.POSTGRES_URL;
 async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
   if (!CONN_STR) throw new Error("POSTGRES_URL not set");
 
-  // Neon's /sql endpoint requires the connection string in a special header
-  const res = await fetch("https://" + new URL(CONN_STR).hostname + "/sql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "neon-connection-string": CONN_STR,
-    },
-    body: JSON.stringify({ query: sql, params: params ?? [] }),
-  });
+  let lastErr: unknown;
+  // Retry transient Neon HTTP /sql failures (free-tier rate limits, cold starts).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch("https://" + new URL(CONN_STR).hostname + "/sql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "neon-connection-string": CONN_STR,
+        },
+        body: JSON.stringify({ query: sql, params: params ?? [] }),
+      });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error("Neon HTTP " + res.status + ": " + text);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error("Neon HTTP " + res.status + ": " + text);
+      }
+
+      const data = await res.json();
+      return data.rows ?? data ?? [];
+    } catch (e) {
+      lastErr = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
   }
-
-  const data = await res.json();
-  return data.rows ?? data ?? [];
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 /* ---------- schema bootstrap ---------- */
