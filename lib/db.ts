@@ -8,9 +8,8 @@ import type { Order, Product } from "./types";
  * - When it is NOT set (e.g. local preview without DB) we fall back to an
  *   in-memory copy of the seed data so the UI still works.
  *
- * Uses @neondatabase/serverless — a pure-JS driver built for Vercel /
- * edge / serverless. No native dependencies, no build-time resolution
- * issues.
+ * Uses @neondatabase/serverless — listed in next.config.mjs
+ * serverExternalPackages so Next.js won't try to bundle it.
  */
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
@@ -21,11 +20,7 @@ let _sql: any = null;
 async function db(): Promise<any> {
   if (!USE_DB) throw new Error("POSTGRES_URL is not configured");
   if (!_sql) {
-    // Dynamic import via variable — prevents any bundler from resolving
-    // this at build time. @neondatabase/serverless is pure JS (no native
-    // deps), so it works on Vercel / edge out of the box.
-    const _driver = "@neondatabase/serverless";
-    const neon = (await import(_driver)).neon;
+    const { neon } = await import("@neondatabase/serverless");
     _sql = neon(CONNECTION_STRING as string);
   }
   return _sql;
