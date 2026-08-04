@@ -18,81 +18,123 @@ export function ProductView({ product }: { product: Product }) {
   const desc = product.description[locale];
 
   return (
-    <div className="container-page grid gap-8 py-8 md:grid-cols-2">
-      {/* Gallery */}
-      <div>
-        <div className="aspect-square overflow-hidden rounded-xl bg-gray-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={product.images[active] ?? product.images[0]}
-            alt={name}
-            className="h-full w-full object-cover"
-          />
-        </div>
-        {product.images.length > 1 && (
-          <div className="mt-3 flex gap-2">
-            {product.images.map((src, i) => (
-              <button
-                key={i}
-                onClick={() => setActive(i)}
-                className={`h-16 w-16 overflow-hidden rounded-lg border-2 ${
-                  i === active ? "border-brand-accent" : "border-transparent"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="container-page py-6">
+      {/* Breadcrumb */}
+      <div className="breadcrumb">
+        <a href="/">Home</a> &nbsp;/&nbsp; <a href="/products">Shop</a> &nbsp;/&nbsp; <span>{name}</span>
       </div>
 
-      {/* Info */}
-      <div>
-        <span className="text-xs uppercase tracking-wide text-gray-400">
-          {product.category}
-        </span>
-        <h1 className="mt-1 text-3xl font-bold text-gray-900">{name}</h1>
-        <p className="mt-3 text-2xl font-bold text-gray-900">
-          {formatMoney(product.priceUSD, currency)}
-        </p>
-        <p className="mt-4 text-gray-600">{desc}</p>
+      <div className="grid gap-10 py-8 md:grid-cols-2">
+        {/* Gallery */}
+        <div>
+          <div className="product-card-image-wrap rounded-xl" style={{ aspectRatio: "1/1" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={product.images[active] ?? product.images[0]}
+              alt={name}
+              className="product-card-image"
+            />
+          </div>
+          {product.images.length > 1 && (
+            <div className="mt-3 flex gap-2">
+              {product.images.map((src, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActive(i)}
+                  className={`h-16 w-16 overflow-hidden rounded-lg border-2 transition ${
+                    i === active ? "border-[var(--accent)]" : "border-transparent opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <div className="mt-6 flex items-center gap-3">
-          <div className="flex items-center rounded-lg border border-gray-300">
+        {/* Info */}
+        <div className="flex flex-col">
+          {product.featured && (
+            <span className="badge-new inline-block w-fit mb-3">NEW</span>
+          )}
+          <span className="text-xs font-bold tracking-widest uppercase text-[var(--fg-muted)]">
+            {product.category}
+          </span>
+          <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[var(--fg-primary)] leading-tight">
+            {name}
+          </h1>
+
+          {/* Rating placeholder */}
+          <div className="mt-2 flex items-center gap-1">
+            {[...Array(5)].map((_, i) => (
+              <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            ))}
+            <span className="ml-1 text-xs text-[var(--fg-muted)]">(128 reviews)</span>
+          </div>
+
+          <p className="mt-4 text-2xl font-bold text-[var(--fg-primary)]">
+            {formatMoney(product.priceUSD, currency)}
+          </p>
+
+          <p className="mt-4 text-sm leading-relaxed text-[var(--fg-secondary)]">
+            {desc}
+          </p>
+
+          {/* Features list */}
+          <ul className="mt-4 space-y-1.5 text-sm text-[var(--fg-secondary)]">
+            <li className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Free international shipping over $80
+            </li>
+            <li className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              2-year manufacturer warranty
+            </li>
+            <li className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              30-day hassle-free returns
+            </li>
+          </ul>
+
+          {/* Quantity + Add to cart */}
+          <div className="mt-8 flex items-center gap-3">
+            <div className="qty-selector">
+              <button onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+              <span>{qty}</span>
+              <button onClick={() => setQty(q => q + 1)}>+</button>
+            </div>
             <button
-              className="px-3 py-2 text-lg text-gray-600"
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              disabled={product.inventory <= 0}
+              onClick={() => {
+                add(
+                  {
+                    productId: product.id,
+                    slug: product.slug,
+                    name: product.name,
+                    image: product.images[0] ?? "",
+                    priceUSD: product.priceUSD,
+                  },
+                  qty
+                );
+                router.push("/cart");
+              }}
+              className="btn-primary flex-1"
             >
-              −
-            </button>
-            <span className="w-10 text-center">{qty}</span>
-            <button
-              className="px-3 py-2 text-lg text-gray-600"
-              onClick={() => setQty((q) => q + 1)}
-            >
-              +
+              {product.inventory <= 0 ? t("product.outOfStock") : t("product.addToCart")}
             </button>
           </div>
-          <button
-            disabled={product.inventory <= 0}
-            onClick={() => {
-              add(
-                {
-                  productId: product.id,
-                  slug: product.slug,
-                  name: product.name,
-                  image: product.images[0] ?? "",
-                  priceUSD: product.priceUSD,
-                },
-                qty
-              );
-              router.push("/cart");
-            }}
-            className="btn-primary flex-1"
-          >
-            {product.inventory <= 0 ? t("product.outOfStock") : t("product.addToCart")}
-          </button>
+
+          {/* Stock status */}
+          <p className="mt-3 text-xs text-[var(--fg-muted)]">
+            {product.inventory > 50
+              ? "✓ In stock — ships within 24 hours"
+              : product.inventory > 0
+                ? `Only ${product.inventory} left in stock`
+                : "Out of stock"}
+          </p>
         </div>
       </div>
     </div>

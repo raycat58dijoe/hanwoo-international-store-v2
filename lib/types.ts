@@ -41,6 +41,7 @@ export interface Order {
 }
 
 export interface DBShape {
+  version?: number;
   products: Product[];
   orders: Order[];
 }

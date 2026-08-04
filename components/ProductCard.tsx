@@ -6,53 +6,72 @@ import { useI18n } from "./I18nProvider";
 import { useCart } from "./CartProvider";
 import { formatMoney } from "@/lib/currency";
 
+// Color palette for variant dots
+const COLOR_SWATCHES: Record<string, string[]> = {
+  default: ["#1a1a1a", "#8b7355", "#c0c0c0", "#4a5568"],
+  charger: ["#ffffff", "#1a1a1a", "#3b82f6", "#8b5cf6"],
+  "power bank": ["#1a1a1a", "#f5f5f4", "#3b82f6"],
+  earbuds: ["#ffffff", "#1a1a1a", "#f59e0b"],
+  headphone: ["#1a1a1a", "#f5f5f4", "#3b82f6"],
+  speaker: ["#1a1a1a", "#4a5568", "#dc2626"],
+  hub: ["#1a1a1a", "#c0c0c0"],
+  cable: ["#ffffff", "#1a1a1a"],
+  watch: ["#1a1a1a", "#c0c0c0", "#3b82f6"],
+  storage: ["#1a1a1a", "#c0c0c0", "#8b5cf6"],
+  keyboard: ["#1a1a1a", "#f5f5f4", "#3b82f6"],
+  mouse: ["#1a1a1a", "#f5f5f4", "#8b5cf6"],
+  gaming: ["#1a1a1a", "#dc2626", "#16a34a"],
+};
+
 export function ProductCard({ product }: { product: Product }) {
   const { locale, currency, t } = useI18n();
   const { add } = useCart();
   const name = product.name[locale];
   const image = product.images[0] ?? "";
+  const isNew = product.featured;
+  const colors = COLOR_SWATCHES[product.category] || COLOR_SWATCHES.default;
 
   return (
-    <div className="card flex flex-col overflow-hidden transition hover:shadow-md">
-      <Link href={`/products/${product.slug}`} className="block aspect-square overflow-hidden bg-gray-100">
+    <div className="product-card group">
+      {/* NEW badge */}
+      {isNew && <span className="badge-new">NEW</span>}
+
+      {/* Image */}
+      <Link href={`/products/${product.slug}`} className="block product-card-image-wrap">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={image}
           alt={name}
-          className="h-full w-full object-cover transition hover:scale-105"
+          className="product-card-image"
           loading="lazy"
         />
       </Link>
-      <div className="flex flex-1 flex-col p-4">
-        <span className="text-xs uppercase tracking-wide text-gray-400">
-          {product.category}
-        </span>
+
+      {/* Info */}
+      <div className="product-card-info">
+        {/* Color dots */}
+        <div className="flex gap-1.5 mb-2">
+          {colors.slice(0, 4).map((c, i) => (
+            <span
+              key={i}
+              className={`color-dot ${i === 0 ? "active" : ""}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </div>
+
+        {/* Name */}
         <Link
           href={`/products/${product.slug}`}
-          className="mt-1 line-clamp-2 font-semibold text-gray-900 hover:text-brand-accent"
+          className="product-card-name line-clamp-2 hover:text-[var(--fg-primary)]"
         >
           {name}
         </Link>
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-lg font-bold text-gray-900">
-            {formatMoney(product.priceUSD, currency)}
-          </span>
+
+        {/* Price */}
+        <div className="product-card-price">
+          {formatMoney(product.priceUSD, currency)}
         </div>
-        <button
-          disabled={product.inventory <= 0}
-          onClick={() =>
-            add({
-              productId: product.id,
-              slug: product.slug,
-              name: product.name,
-              image,
-              priceUSD: product.priceUSD,
-            })
-          }
-          className="btn-primary mt-3 w-full"
-        >
-          {product.inventory <= 0 ? t("product.outOfStock") : t("product.addToCart")}
-        </button>
       </div>
     </div>
   );
