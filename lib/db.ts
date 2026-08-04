@@ -92,8 +92,18 @@ export async function deleteProduct(id: string): Promise<Product[]> {
 export async function createOrder(o: Order): Promise<Order> {
   const neon = await getNeon();
   if (!neon) { memOrders.push(o); return o; }
-  try { await neon.queryWithSchema(`INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.createdAt]); return o; }
-  catch { return createOrder(o); }
+  try {
+    await neon.queryWithSchema(
+      `INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.createdAt]
+    );
+    return o;
+  } catch (e: any) {
+    console.error("[createOrder] INSERT failed:", e?.message);
+    // Fall back to in-memory so the request still completes (no infinite retry).
+    memOrders.push(o);
+    return o;
+  }
 }
 
 export async function getAllOrders(): Promise<Order[]> {
@@ -128,7 +138,13 @@ export async function updateOrder(id: string, patch: Partial<Order>): Promise<Or
     if (sets.length === 0) return getOrder(id);
     await neon.queryWithSchema("UPDATE orders SET " + sets.join(",") + " WHERE id=$" + n, [...vals, id]);
     return getOrder(id);
-  } catch { return updateOrder(id, patch); }
+  } catch (e: any) {
+    console.error("[updateOrder] UPDATE failed:", e?.message);
+    // Apply in-memory best-effort, no recursion.
+    const i = memOrders.findIndex((o) => o.id === id);
+    if (i >= 0) { memOrders[i] = { ...memOrders[i], ...patch }; return memOrders[i]; }
+    return undefined;
+  }
 }
 
 /**
