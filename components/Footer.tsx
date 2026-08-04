@@ -38,7 +38,9 @@ export function Footer() {
           <div>
             <h4 className="footer-heading">Support</h4>
             <ul className="space-y-2 text-sm">
+              <li><Link href="/account">My Orders</Link></li>
               <li><Link href="/track">Track Order</Link></li>
+              <li><Link href="/faq">FAQ</Link></li>
               <li><Link href="/shipping">Shipping Info</Link></li>
               <li><Link href="/returns">Returns & Warranty</Link></li>
               <li><Link href="/contact">Contact Us</Link></li>

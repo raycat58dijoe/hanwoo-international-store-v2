@@ -26,6 +26,7 @@ export function Header() {
     { href: "/", label: t("nav.home") },
     { href: "/products", label: t("nav.shop") },
     { href: "/products?category=featured", label: t("nav.featured") },
+    { href: "/account", label: "My Orders" },
     { href: "/track", label: "Track Order" },
   ];
 

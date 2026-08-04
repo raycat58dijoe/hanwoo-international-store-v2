@@ -121,6 +121,9 @@ function SuccessInner() {
           <Link href={`/track?id=${order.id}`} className="btn-secondary">
             {t("success.trackOrder") ?? "Track this order"}
           </Link>
+          <Link href={`/account?email=${encodeURIComponent(order.customer?.email ?? "")}`} className="text-sm text-brand-accent hover:underline">
+            {t("success.myOrders") ?? "View all my orders →"}
+          </Link>
           <Link href="/" className="text-sm text-brand-accent hover:underline">
             {t("success.backHome")}
           </Link>

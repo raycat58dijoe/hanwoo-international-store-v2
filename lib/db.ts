@@ -122,6 +122,20 @@ export async function getAllOrders(): Promise<Order[]> {
   try { return (await neon.queryWithSchema("SELECT * FROM orders ORDER BY created_at DESC")).map(rowToOrder); }
   catch { return memOrders.slice().reverse(); }
 }
+
+/** Customer-facing lookup: all orders placed with a given email. */
+export async function getOrdersByEmail(email: string): Promise<Order[]> {
+  const e = email.trim().toLowerCase();
+  if (!e) return [];
+  const neon = await getNeon();
+  if (!neon) return memOrders.filter((o) => o.customer?.email?.toLowerCase() === e).slice().reverse();
+  try {
+    const rows = await neon.queryWithSchema("SELECT * FROM orders WHERE LOWER(customer->>'email') = $1 ORDER BY created_at DESC", [e]);
+    return rows.map(rowToOrder);
+  } catch {
+    return memOrders.filter((o) => o.customer?.email?.toLowerCase() === e).slice().reverse();
+  }
+}
 export async function getOrder(id: string): Promise<Order | undefined> {
   const neon = await getNeon();
   if (!neon) return memOrders.find((o) => o.id === id);
