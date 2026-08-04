@@ -55,9 +55,6 @@ function TrackInner() {
     <div className="container-page max-w-2xl py-16">
       <h1 className="text-2xl font-bold text-gray-900">{t("track.title") ?? "Track your order"}</h1>
       <p className="mt-2 text-sm text-gray-500">{t("track.subtitle") ?? "Enter your order ID to see the latest status."}</p>
-      <p className="mt-1 text-xs text-gray-400">
-        <Link href="/account" className="text-brand-accent hover:underline">See all my orders →</Link>
-      </p>
 
       <div className="mt-4 flex gap-2">
         <input
