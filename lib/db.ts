@@ -274,6 +274,24 @@ export async function getReviewsByOrder(orderId: string): Promise<Review[]> {
   }
 }
 
+/** Admin: delete a review by id (moderation / cleanup). */
+export async function deleteReview(id: string): Promise<boolean> {
+  const neon = await getNeon();
+  if (!neon) {
+    const i = memReviews.findIndex((r) => r.id === id);
+    if (i < 0) return false;
+    memReviews.splice(i, 1);
+    return true;
+  }
+  try {
+    await neon.queryWithSchema("DELETE FROM reviews WHERE id = $1", [id]);
+    return true;
+  } catch (e: any) {
+    console.error("[deleteReview] failed:", e?.message);
+    return false;
+  }
+}
+
 export function genId(prefix: string): string {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }

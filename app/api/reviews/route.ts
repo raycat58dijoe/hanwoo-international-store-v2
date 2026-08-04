@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrder, addReview, hasReview, getReviewsByProduct, getReviewsByOrder, genId } from "@/lib/db";
+import { getOrder, addReview, hasReview, getReviewsByProduct, getReviewsByOrder, deleteReview, genId } from "@/lib/db";
 import type { Review } from "@/lib/types";
+
+const ADMIN_KEY = process.env.ADMIN_KEY ?? "admin123";
 
 // POST: submit a review for a delivered order item (no auth — tied to the order).
 // GET: list reviews for a product (public).
@@ -48,4 +50,15 @@ export async function GET(req: NextRequest) {
   if (!productId) return NextResponse.json({ error: "productId required" }, { status: 400 });
   const reviews = await getReviewsByProduct(productId);
   return NextResponse.json({ reviews });
+}
+
+// Admin: delete a review (moderation).
+export async function DELETE(req: NextRequest) {
+  const key = req.headers.get("x-admin-key");
+  if (key !== ADMIN_KEY) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const id = req.nextUrl.searchParams.get("id") ?? "";
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const ok = await deleteReview(id);
+  if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }
