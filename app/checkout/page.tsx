@@ -6,6 +6,7 @@ import { useI18n, CURRENCIES } from "@/components/I18nProvider";
 import { useCart } from "@/components/CartProvider";
 import { formatMoney } from "@/lib/currency";
 import { SHIPPING_THRESHOLD, SHIPPING_FLAT_USD } from "@/lib/shipping";
+import { regionsForCountry, CHECKOUT_COUNTRIES, isValidPostalCode } from "@/lib/regions";
 import type { PaymentMethod } from "@/lib/types";
 
 export default function CheckoutPage() {
@@ -25,8 +26,10 @@ export default function CheckoutPage() {
     email: "",
     address: "",
     city: "",
-    country: "",
+    state: "",
+    country: "US",
     zip: "",
+    phone: "",
   });
 
   useEffect(() => {
@@ -46,8 +49,20 @@ export default function CheckoutPage() {
 
   const submit = async () => {
     setError("");
-    if (!form.email || !form.name || !form.address) {
-      setError("Please fill in name, email and address.");
+    const regions = regionsForCountry(form.country);
+    const missing: string[] = [];
+    if (!form.name.trim()) missing.push("name");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) missing.push("email");
+    if (!form.address.trim()) missing.push("address");
+    if (!form.city.trim()) missing.push("city");
+    if (regions && !form.state) missing.push("state");
+    if (!form.zip.trim()) missing.push("zip");
+    if (form.zip.trim() && !isValidPostalCode(form.country, form.zip)) {
+      setError("Please enter a valid postal code for the selected country.");
+      return;
+    }
+    if (missing.length > 0) {
+      setError(`Please fill in: ${missing.join(", ")}.`);
       return;
     }
     setBusy(true);
@@ -81,6 +96,8 @@ export default function CheckoutPage() {
       setBusy(false);
     }
   };
+
+  const selectedRegions = regionsForCountry(form.country);
 
   const confirmZelleSent = async () => {
     if (!zelle) return;
@@ -172,27 +189,106 @@ export default function CheckoutPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t("checkout.title")}</h1>
         <div className="mt-6 space-y-4">
-          {(
-            [
-              ["name", t("checkout.name")],
-              ["email", t("checkout.email")],
-              ["address", t("checkout.address")],
-              ["city", t("checkout.city")],
-              ["country", t("checkout.country")],
-              ["zip", t("checkout.zip")],
-            ] as const
-          ).map(([key, label]) => (
-            <div key={key}>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                {label}
-              </label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.name")}</label>
               <input
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
-                value={form[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
-          ))}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.email")}</label>
+              <input
+                type="email"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.address")}</label>
+            <input
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+              placeholder={t("checkout.addressPlaceholder") ?? "Street address, apt / suite"}
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.city")}</label>
+              <input
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.state")}</label>
+              {selectedRegions ? (
+                <select
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                  value={form.state}
+                  onChange={(e) => setForm({ ...form, state: e.target.value })}
+                >
+                  <option value="">{t("checkout.stateSelect") ?? "Select…"}</option>
+                  {selectedRegions.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                  placeholder={t("checkout.stateOther") ?? "State / Province"}
+                  value={form.state}
+                  onChange={(e) => setForm({ ...form, state: e.target.value })}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.country")}</label>
+              <select
+                value={form.country}
+                onChange={(e) => setForm({ ...form, country: e.target.value })}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+              >
+                {CHECKOUT_COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.zip")}</label>
+              <input
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                placeholder={form.country === "US" ? "10001" : form.country === "CA" ? "A1A 1A1" : form.country === "MX" ? "01000" : t("checkout.zipPlaceholder") ?? "Postal code"}
+                value={form.zip}
+                onChange={(e) => setForm({ ...form, zip: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              {t("checkout.phone")} <span className="font-normal text-gray-400">({t("checkout.optional")})</span>
+            </label>
+            <input
+              type="tel"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+              placeholder={t("checkout.phonePlaceholder") ?? "For delivery updates (optional)"}
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               {t("checkout.currency")}

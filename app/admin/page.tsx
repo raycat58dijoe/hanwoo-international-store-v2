@@ -340,12 +340,13 @@ export default function AdminPage() {
   // ---------- orders CSV export ----------
   function exportOrdersCSV() {
     const rows = [
-      ["Order ID", "Date", "Customer", "Email", "Items", "Subtotal (USD)", "Shipping (USD)", "Total (USD)", "Status", "Payment", "Tracking"],
+      ["Order ID", "Date", "Customer", "Email", "Phone", "Items", "Subtotal (USD)", "Shipping (USD)", "Total (USD)", "Status", "Payment", "Tracking"],
       ...orders.map((o) => [
         o.id,
         new Date(o.createdAt).toISOString(),
         o.customer?.name ?? "",
         o.customer?.email ?? "",
+        o.customer?.phone ?? "",
         (o.items ?? []).map((it) => `${it.name?.en ?? it.productId} x${it.qty}`).join(" | "),
         (Number(o.amountUSD) - Number(o.shippingUSD ?? 0)).toFixed(2),
         Number(o.shippingUSD ?? 0).toFixed(2),
@@ -779,7 +780,9 @@ export default function AdminPage() {
                     <div>
                       <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Ship to</div>
                       <div className="text-gray-700">
-                        {o.customer?.address}, {o.customer?.city}, {o.customer?.country} {o.customer?.zip}
+                        {o.customer?.name} · {o.customer?.phone && <span className="text-gray-500">{o.customer.phone} · </span>}
+                        {o.customer?.address}, {o.customer?.city}
+                        {o.customer?.state ? `, ${o.customer.state}` : ""}, {o.customer?.country} {o.customer?.zip}
                       </div>
                     </div>
 

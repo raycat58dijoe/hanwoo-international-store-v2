@@ -52,8 +52,10 @@ export interface Order {
     email: string;
     address: string;
     city: string;
+    state?: string;
     country: string;
     zip: string;
+    phone?: string;
   };
   status: OrderStatus;
   /** Which payment method the customer chose at checkout. */
