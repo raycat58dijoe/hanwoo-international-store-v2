@@ -9,6 +9,19 @@ function parseConnStr(s: string) {
   return { host: url.hostname, user: url.username, pass: url.password, dbname: url.pathname.slice(1) || "neondb" };
 }
 
+async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  const c = parseConnStr(CONNECTION_STRING!);
+  const auth = Buffer.from(c.user + ":" + c.pass).toString("base64");
+  const res = await fetch("https://" + c.host + "/sql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Basic " + auth },
+    body: JSON.stringify({ query: sql, params: params ?? [] }),
+  });
+  if (!res.ok) { const text = await res.text(); throw new Error("Neon HTTP " + res.status + ": " + text); }
+  const data = await res.json();
+  return data.rows ?? data ?? [];
+}
+
 /* ---------- in-memory store ---------- */
 let memProducts: Product[] | null = null;
 let memOrders: Order[] = [];
