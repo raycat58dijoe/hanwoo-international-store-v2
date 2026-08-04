@@ -179,6 +179,25 @@ export async function markOrderPaid(id: string, sessionId?: string): Promise<Ord
   return updateOrder(id, sessionId ? { status: "paid", stripeSessionId: sessionId } : { status: "paid" });
 }
 
+export async function deleteOrder(id: string): Promise<boolean> {
+  const neon = await getNeon();
+  if (!neon) {
+    const i = memOrders.findIndex((o) => o.id === id);
+    if (i < 0) return false;
+    memOrders.splice(i, 1);
+    return true;
+  }
+  try {
+    await neon.queryWithSchema("DELETE FROM orders WHERE id = $1", [id]);
+    return true;
+  } catch (e: any) {
+    console.error("[deleteOrder] DELETE failed:", e?.message);
+    const i = memOrders.findIndex((o) => o.id === id);
+    if (i >= 0) { memOrders.splice(i, 1); return true; }
+    return false;
+  }
+}
+
 export function genId(prefix: string): string {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }

@@ -155,6 +155,13 @@ export default function AdminPage() {
     if (ok) setNoteForm((s) => ({ ...s, [id]: "" }));
   }
 
+  async function removeOrder(id: string) {
+    if (!confirm("Delete this order? This cannot be undone.")) return;
+    const res = await fetch(`/api/orders/${id}`, { method: "DELETE", headers: { "x-admin-key": key } });
+    if (res.ok) { loadOrders(); setMsg("Order deleted."); }
+    else setMsg("Delete failed: " + (await res.json()).error);
+  }
+
   // ---------- dashboard stats ----------
   const total = orders.length;
   const revenue = orders
@@ -300,6 +307,12 @@ export default function AdminPage() {
                       onClick={() => setDetailId(open ? null : o.id)}
                     >
                       {open ? (t("admin.collapse") ?? "Collapse") : (t("admin.details") ?? "Details")}
+                    </button>
+                    <button
+                      className="mt-1 block text-xs text-red-500 hover:underline"
+                      onClick={() => removeOrder(o.id)}
+                    >
+                      {t("admin.deleteOrder") ?? "Delete order"}
                     </button>
                   </div>
                 </div>

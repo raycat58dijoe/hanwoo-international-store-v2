@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrder, updateOrder, getAllOrders, markOrderPaid } from "@/lib/db";
+import { getOrder, updateOrder, getAllOrders, markOrderPaid, deleteOrder } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
 
 const ADMIN_KEY = process.env.ADMIN_KEY ?? "admin123";
@@ -91,4 +91,18 @@ export async function PATCH(
   const updated = await updateOrder(params.id, patch);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ order: updated });
+}
+
+// Admin: delete an order (e.g. test/spam orders).
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const adminKey = _req.headers.get("x-admin-key");
+  if (!adminKey || adminKey !== ADMIN_KEY) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const ok = await deleteOrder(params.id);
+  if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }
