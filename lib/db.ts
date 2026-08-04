@@ -4,6 +4,11 @@ import type { Order, Product } from "./types";
 const CONNECTION_STRING = process.env.POSTGRES_URL;
 const USE_DB = Boolean(CONNECTION_STRING);
 
+function parseConnStr(s: string) {
+  const url = new URL(s);
+  return { host: url.hostname, user: url.username, pass: url.password, dbname: url.pathname.slice(1) || "neondb" };
+}
+
 /* ---------- in-memory store ---------- */
 let memProducts: Product[] | null = null;
 let memOrders: Order[] = [];
