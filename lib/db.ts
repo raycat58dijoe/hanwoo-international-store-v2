@@ -284,11 +284,13 @@ export async function deleteReview(id: string): Promise<boolean> {
     return true;
   }
   try {
+    // ensureSchema() runs before every query; expose the underlying error so
+    // we can see why DELETE on reviews fails while orders works.
     await neon.queryWithSchema("DELETE FROM reviews WHERE id = $1", [id]);
     return true;
   } catch (e: any) {
     console.error("[deleteReview] failed:", e?.message);
-    return false;
+    throw e; // surface for diagnosis
   }
 }
 
