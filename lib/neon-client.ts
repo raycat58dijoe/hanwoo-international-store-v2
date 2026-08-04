@@ -1,18 +1,34 @@
 /**
  * Neon HTTP client — pure fetch, zero npm dependencies.
+ * Uses Neon's /sql endpoint with proper authentication.
  * Only imported at runtime via dynamic import() from db.ts.
- *
- * This separation ensures Next.js's build-time bundler never sees
- * this code, avoiding module_not_found issues.
  */
 
 const CONN_STR = process.env.POSTGRES_URL;
 
-function parseConnStr(s: string) {
-  const url = new URL(s);
-  return { host: url.hostname, user: url.username, pass: url.password };
+async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  if (!CONN_STR) throw new Error("POSTGRES_URL not set");
+
+  // Neon's /sql endpoint requires the connection string in a special header
+  const res = await fetch("https://" + new URL(CONN_STR).hostname + "/sql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "neon-connection-string": CONN_STR,
+    },
+    body: JSON.stringify({ query: sql, params: params ?? [] }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error("Neon HTTP " + res.status + ": " + text);
+  }
+
+  const data = await res.json();
+  return data.rows ?? data ?? [];
 }
 
+/* ---------- schema bootstrap ---------- */
 let _ready: Promise<void> | null = null;
 
 function ensureSchema(): Promise<void> {
@@ -39,7 +55,8 @@ function ensureSchema(): Promise<void> {
         stripe_session_id TEXT,
         created_at TEXT NOT NULL
       )`);
-      // Dynamic import of seed to avoid circular deps / build analysis
+
+      // Dynamic import of seed to avoid circular deps
       const { SEED_PRODUCTS } = await import("./seed");
       const rows = await query<{ count: number }>("SELECT COUNT(*)::int AS count FROM products");
       if (rows[0]?.count === 0) {
@@ -56,17 +73,8 @@ function ensureSchema(): Promise<void> {
   return _ready;
 }
 
-export async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
-  if (!CONN_STR) throw new Error("POSTGRES_URL not set");
+// Wrap query to ensure schema exists first
+export async function queryWithSchema<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
   await ensureSchema();
-  const c = parseConnStr(CONN_STR);
-  const auth = Buffer.from(c.user + ":" + c.pass).toString("base64");
-  const res = await fetch("https://" + c.host + "/sql", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Basic " + auth },
-    body: JSON.stringify({ query: sql, params: params ?? [] }),
-  });
-  if (!res.ok) { const text = await res.text(); throw new Error("Neon HTTP " + res.status + ": " + text); }
-  const data = await res.json();
-  return data.rows ?? data ?? [];
+  return query<T>(sql, params);
 }
