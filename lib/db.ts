@@ -10,20 +10,14 @@ const DATA_FILE = path.join(DATA_DIR, "store.json");
 let memStore: DBShape | null = null;
 
 function ensureStore(): DBShape {
-  // Try file-based first
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) {
-      try {
-        const initial: DBShape = { version: SEED_VERSION, products: SEED_PRODUCTS, orders: [] };
-        fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
-        return initial;
-      } catch {
-        // File write blocked — use memory
-        memStore = { version: SEED_VERSION, products: SEED_PRODUCTS, orders: [] };
-        return memStore;
-      }
-    }
   try {
+    // Try file-based first (works locally; read-only on serverless → falls back below)
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DATA_FILE)) {
+      const initial: DBShape = { version: SEED_VERSION, products: SEED_PRODUCTS, orders: [] };
+      fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+      return initial;
+    }
     const raw = fs.readFileSync(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw) as DBShape;
     if (!parsed.products) parsed.products = SEED_PRODUCTS;
@@ -36,7 +30,7 @@ function ensureStore(): DBShape {
     }
     return parsed;
   } catch {
-    // File read blocked — seed from code
+    // File system read-only / locked — use in-memory seed (serverless safe)
     if (!memStore) memStore = { version: SEED_VERSION, products: SEED_PRODUCTS, orders: [] };
     return memStore;
   }
@@ -50,7 +44,11 @@ function persist(data: DBShape): Promise<void> {
   writeChain = writeChain.then(
     () =>
       new Promise<void>((resolve) => {
-        fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), () => resolve());
+        try {
+          fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), () => resolve());
+        } catch {
+          resolve(); // read-only FS (serverless) — skip persistence
+        }
       })
   );
   return writeChain;
