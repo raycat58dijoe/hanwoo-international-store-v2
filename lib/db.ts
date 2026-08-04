@@ -27,7 +27,7 @@ async function getNeon(): Promise<{ queryWithSchema: typeof queryWithSchema } | 
 /* ---------- row mappers ---------- */
 function rowToProduct(r: any): Product {
   const images = typeof r.images === "string" ? JSON.parse(r.images) : Array.isArray(r.images) ? r.images : [];
-  return { id: r.id, slug: r.slug, name: { en: r.name_en, zh: r.name_zh }, description: { en: r.description_en, zh: r.description_zh }, priceUSD: Number(r.price_usd), images, category: r.category, inventory: Number(r.inventory), featured: r.featured, active: r.active };
+  return { id: r.id, slug: r.slug, name: { en: r.name_en, zh: r.name_zh }, description: { en: r.description_en, zh: r.description_zh }, priceUSD: Number(r.price_usd), salePriceUSD: r.sale_price_usd != null ? Number(r.sale_price_usd) : undefined, images, category: r.category, inventory: Number(r.inventory), featured: r.featured, active: r.active };
 }
 function rowToOrder(r: any): Order {
   return {
@@ -77,7 +77,7 @@ export async function upsertProduct(p: Product): Promise<Product[]> {
   const neon = await getNeon();
   if (!neon) { const list = memEnsure(); const i = list.findIndex((x) => x.id === p.id); if (i >= 0) list[i] = p; else list.push(p); return list; }
   try {
-    await neon.queryWithSchema(`INSERT INTO products (id,slug,name_en,name_zh,description_en,description_zh,price_usd,images,category,inventory,featured,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,name_en=EXCLUDED.name_en,name_zh=EXCLUDED.name_zh,description_en=EXCLUDED.description_en,description_zh=EXCLUDED.description_zh,price_usd=EXCLUDED.price_usd,images=EXCLUDED.images,category=EXCLUDED.category,inventory=EXCLUDED.inventory,featured=EXCLUDED.featured,active=EXCLUDED.active`, [p.id, p.slug, p.name.en, p.name.zh, p.description.en, p.description.zh, p.priceUSD, JSON.stringify(p.images), p.category, p.inventory, p.featured, p.active]);
+    await neon.queryWithSchema(`INSERT INTO products (id,slug,name_en,name_zh,description_en,description_zh,price_usd,sale_price_usd,images,category,inventory,featured,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,name_en=EXCLUDED.name_en,name_zh=EXCLUDED.name_zh,description_en=EXCLUDED.description_en,description_zh=EXCLUDED.description_zh,price_usd=EXCLUDED.price_usd,sale_price_usd=EXCLUDED.sale_price_usd,images=EXCLUDED.images,category=EXCLUDED.category,inventory=EXCLUDED.inventory,featured=EXCLUDED.featured,active=EXCLUDED.active`, [p.id, p.slug, p.name.en, p.name.zh, p.description.en, p.description.zh, p.priceUSD, p.salePriceUSD ?? null, JSON.stringify(p.images), p.category, p.inventory, p.featured, p.active]);
     return getAllProducts();
   } catch (e: any) {
     console.error("[upsertProduct] failed:", e?.message);

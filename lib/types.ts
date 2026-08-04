@@ -7,6 +7,8 @@ export interface Product {
   description: Localized;
   /** Base price in USD; displayed in other currencies via conversion. */
   priceUSD: number;
+  /** Optional sale price in USD. When set, it is displayed (and charged) instead of priceUSD, which is shown struck-through. */
+  salePriceUSD?: number;
   images: string[];
   category: string;
   inventory: number;

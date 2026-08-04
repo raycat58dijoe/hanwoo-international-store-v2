@@ -44,14 +44,16 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      // Charge the sale price when one is set; otherwise the base price.
+      const unitUSD = p.salePriceUSD ?? p.priceUSD;
       orderItems.push({
         productId: p.id,
         name: p.name,
         image: p.images[0] ?? "",
-        priceUSD: p.priceUSD,
+        priceUSD: unitUSD,
         qty: it.qty,
       });
-      amountUSD += p.priceUSD * it.qty;
+      amountUSD += unitUSD * it.qty;
     }
 
     const order: Order = {

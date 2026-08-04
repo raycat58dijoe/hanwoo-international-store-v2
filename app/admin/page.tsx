@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import type { Product, Order, OrderStatus } from "@/lib/types";
 
@@ -9,11 +9,15 @@ interface FormState {
   slug: string;
   nameEn: string;
   nameZh: string;
+  descEn: string;
+  descZh: string;
   price: string;
+  salePrice: string;
   category: string;
   inventory: string;
-  image: string;
+  images: string;
   featured: boolean;
+  active: boolean;
 }
 
 const emptyForm: FormState = {
@@ -21,11 +25,15 @@ const emptyForm: FormState = {
   slug: "",
   nameEn: "",
   nameZh: "",
+  descEn: "",
+  descZh: "",
   price: "",
-  category: "",
+  salePrice: "",
+  category: "General",
   inventory: "0",
-  image: "",
+  images: "",
   featured: false,
+  active: true,
 };
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -43,6 +51,8 @@ const STATUS_CLASS: Record<OrderStatus, string> = {
   failed: "bg-red-100 text-red-700",
 };
 
+const LOW_STOCK_THRESHOLD = 5;
+
 export default function AdminPage() {
   const { t } = useI18n();
   const [key, setKey] = useState("");
@@ -54,6 +64,7 @@ export default function AdminPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [shipForm, setShipForm] = useState<Record<string, { tracking: string; url: string }>>({});
   const [noteForm, setNoteForm] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("adminKey") ?? "";
@@ -84,18 +95,21 @@ export default function AdminPage() {
     loadOrders();
   }
 
+  // ---------- product operations ----------
   async function submit() {
     if (!editing) return;
     const body: Partial<Product> = {
       id: editing.id || `p_${Date.now().toString(36)}`,
       slug: editing.slug || editing.id || `p_${Date.now().toString(36)}`,
       name: { en: editing.nameEn, zh: editing.nameZh },
-      description: { en: "", zh: "" },
+      description: { en: editing.descEn, zh: editing.descZh },
       priceUSD: Number(editing.price) || 0,
+      salePriceUSD: editing.salePrice ? Number(editing.salePrice) : undefined,
       category: editing.category || "General",
       inventory: Number(editing.inventory) || 0,
-      images: editing.image ? [editing.image] : [],
+      images: editing.images.split(",").map((s) => s.trim()).filter(Boolean),
       featured: editing.featured,
+      active: editing.active,
     };
     const res = await fetch("/api/products", {
       method: "POST",
@@ -112,19 +126,49 @@ export default function AdminPage() {
   }
 
   async function remove(id: string) {
+    if (!confirm("Delete this product? This cannot be undone.")) return;
     const res = await fetch(`/api/products/${id}`, { method: "DELETE", headers: { "x-admin-key": key } });
     if (res.ok) load();
   }
 
-  function startEdit(p?: Product) {
+  async function patchProduct(id: string, patch: Record<string, unknown>) {
+    const res = await fetch(`/api/products/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) load();
+    return res.ok;
+  }
+
+  async function quickAdjust(id: string, delta: number) {
+    await patchProduct(id, { inventoryDelta: delta });
+  }
+
+  async function toggleActive(p: Product) {
+    await patchProduct(p.id, { active: !p.active });
+  }
+
+  function startEdit(p?: Product, clone = false) {
     if (!p) { setEditing({ ...emptyForm }); return; }
     setEditing({
-      id: p.id, slug: p.slug, nameEn: p.name.en, nameZh: p.name.zh,
-      price: String(p.priceUSD), category: p.category, inventory: String(p.inventory),
-      image: p.images[0] ?? "", featured: p.featured,
+      id: clone ? "" : p.id,
+      slug: clone ? "" : p.slug,
+      nameEn: p.name.en,
+      nameZh: p.name.zh,
+      descEn: p.description?.en ?? "",
+      descZh: p.description?.zh ?? "",
+      price: String(p.priceUSD),
+      salePrice: p.salePriceUSD != null ? String(p.salePriceUSD) : "",
+      category: p.category,
+      inventory: String(p.inventory),
+      images: p.images.join(", "),
+      featured: p.featured,
+      active: p.active,
     });
   }
 
+  // ---------- order operations ----------
   async function patchOrder(id: string, patch: Record<string, unknown>) {
     const res = await fetch(`/api/orders/${id}`, {
       method: "PATCH",
@@ -135,26 +179,17 @@ export default function AdminPage() {
     return res.ok;
   }
 
-  async function confirmPayment(id: string) {
-    await patchOrder(id, { status: "paid" });
-  }
+  async function confirmPayment(id: string) { await patchOrder(id, { status: "paid" }); }
   async function markShipped(id: string) {
     const f = shipForm[id] ?? { tracking: "", url: "" };
-    const ok = await patchOrder(id, {
-      status: "shipped",
-      trackingNumber: f.tracking,
-      trackingUrl: f.url,
-    });
+    const ok = await patchOrder(id, { status: "shipped", trackingNumber: f.tracking, trackingUrl: f.url });
     if (ok) setShipForm((s) => ({ ...s, [id]: { tracking: "", url: "" } }));
   }
-  async function markDelivered(id: string) {
-    await patchOrder(id, { status: "delivered" });
-  }
+  async function markDelivered(id: string) { await patchOrder(id, { status: "delivered" }); }
   async function saveNote(id: string) {
     const ok = await patchOrder(id, { note: noteForm[id] ?? "" });
     if (ok) setNoteForm((s) => ({ ...s, [id]: "" }));
   }
-
   async function removeOrder(id: string) {
     if (!confirm("Delete this order? This cannot be undone.")) return;
     const res = await fetch(`/api/orders/${id}`, { method: "DELETE", headers: { "x-admin-key": key } });
@@ -163,13 +198,47 @@ export default function AdminPage() {
   }
 
   // ---------- dashboard stats ----------
-  const total = orders.length;
+  const totalOrders = orders.length;
   const revenue = orders
     .filter((o) => o.status === "paid" || o.status === "shipped" || o.status === "delivered")
     .reduce((s, o) => s + Number(o.amountUSD), 0);
   const pending = orders.filter((o) => o.status === "pending").length;
   const awaitingShip = orders.filter((o) => o.status === "paid").length;
-  const shipped = orders.filter((o) => o.status === "shipped").length;
+
+  const totalProducts = products.length;
+  const onSale = products.filter((p) => p.active).length;
+  const lowStockList = products.filter((p) => p.active && p.inventory > 0 && p.inventory <= LOW_STOCK_THRESHOLD)
+    .sort((a, b) => a.inventory - b.inventory);
+  const outOfStock = products.filter((p) => p.active && p.inventory === 0).length;
+  const hiddenCount = totalProducts - onSale;
+
+  const topSellers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; qty: number; revenue: number }>();
+    for (const o of orders) {
+      for (const it of o.items ?? []) {
+        const e = map.get(it.productId) ?? { id: it.productId, name: it.name?.en ?? it.productId, qty: 0, revenue: 0 };
+        e.qty += it.qty;
+        e.revenue += it.priceUSD * it.qty;
+        map.set(it.productId, e);
+      }
+    }
+    return [...map.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
+  }, [orders]);
+
+  // search filter
+  const q = search.trim().toLowerCase();
+  const shownProducts = q
+    ? products.filter((p) =>
+        [p.id, p.slug, p.name.en, p.name.zh, p.category].some((s) => s?.toLowerCase().includes(q))
+      )
+    : products;
+
+  function StockBadge({ p }: { p: Product }) {
+    if (!p.active) return <span className="rounded bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">{t("admin.hidden")}</span>;
+    if (p.inventory === 0) return <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">{t("admin.outOfStock")}</span>;
+    if (p.inventory <= LOW_STOCK_THRESHOLD) return <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">{t("admin.lowStock")} {p.inventory}</span>;
+    return <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">{t("admin.inStock")} {p.inventory}</span>;
+  }
 
   if (!key) {
     return (
@@ -214,18 +283,86 @@ export default function AdminPage() {
 
       {/* ============ DASHBOARD ============ */}
       {tab === "dashboard" && (
-        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            { label: t("admin.statTotal") ?? "Total Orders", value: total, cls: "text-gray-900" },
-            { label: t("admin.statRevenue") ?? "Revenue", value: "$" + revenue.toFixed(2), cls: "text-green-700" },
-            { label: t("admin.statPending") ?? "Pending", value: pending, cls: "text-amber-700" },
-            { label: t("admin.statAwaitingShip") ?? "Awaiting Ship", value: awaitingShip, cls: "text-blue-700" },
-          ].map((c) => (
-            <div key={c.label} className="card p-4">
-              <div className="text-xs uppercase tracking-wide text-gray-400">{c.label}</div>
-              <div className={`mt-1 text-2xl font-bold ${c.cls}`}>{c.value}</div>
+        <div className="mt-6 space-y-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { label: t("admin.statTotal") ?? "Total Orders", value: totalOrders, cls: "text-gray-900" },
+              { label: t("admin.statRevenue") ?? "Revenue", value: "$" + revenue.toFixed(2), cls: "text-green-700" },
+              { label: t("admin.statPending") ?? "Pending", value: pending, cls: "text-amber-700" },
+              { label: t("admin.statAwaitingShip") ?? "Awaiting Ship", value: awaitingShip, cls: "text-blue-700" },
+            ].map((c) => (
+              <div key={c.label} className="card p-4">
+                <div className="text-xs uppercase tracking-wide text-gray-400">{c.label}</div>
+                <div className={`mt-1 text-2xl font-bold ${c.cls}`}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { label: t("admin.statProducts") ?? "Products", value: totalProducts, cls: "text-gray-900", hint: `${onSale} on sale` },
+              { label: t("admin.statOnSale") ?? "On sale", value: onSale, cls: "text-green-700", hint: `${hiddenCount} hidden` },
+              { label: t("admin.statLowStock") ?? "Low stock", value: lowStockList.length + outOfStock, cls: "text-amber-700", hint: `${outOfStock} out of stock` },
+              { label: t("admin.statHidden") ?? "Hidden", value: hiddenCount, cls: "text-gray-500", hint: "" },
+            ].map((c) => (
+              <div key={c.label} className="card p-4">
+                <div className="text-xs uppercase tracking-wide text-gray-400">{c.label}</div>
+                <div className={`mt-1 text-2xl font-bold ${c.cls}`}>{c.value}</div>
+                {c.hint && <div className="mt-0.5 text-xs text-gray-400">{c.hint}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Low stock alert */}
+            <div className="card p-4">
+              <h3 className="text-sm font-semibold text-gray-900">
+                ⚠️ {t("admin.lowStockAlert") ?? "Low stock alert"}
+              </h3>
+              {lowStockList.length + outOfStock === 0 ? (
+                <p className="mt-2 text-sm text-gray-400">All good.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {lowStockList.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{p.name.en}</span>
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        {p.inventory} left
+                      </span>
+                    </li>
+                  ))}
+                  {products.filter((p) => p.active && p.inventory === 0).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{p.name.en}</span>
+                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">
+                        {t("admin.outOfStock") ?? "Out of stock"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-          ))}
+
+            {/* Top sellers */}
+            <div className="card p-4">
+              <h3 className="text-sm font-semibold text-gray-900">
+                🔥 {t("admin.topSellers") ?? "Top sellers"}
+              </h3>
+              {topSellers.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-400">No sales yet.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {topSellers.map((s, i) => (
+                    <li key={s.id} className="flex items-center gap-3 text-sm">
+                      <span className="w-5 text-center font-bold text-gray-400">{i + 1}</span>
+                      <span className="flex-1 truncate text-gray-700">{s.name}</span>
+                      <span className="text-xs text-gray-400">{s.qty} × ${s.revenue.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -236,14 +373,31 @@ export default function AdminPage() {
             <input className="input" placeholder={t("admin.nameEn")} value={editing.nameEn} onChange={(e) => setEditing({ ...editing, nameEn: e.target.value })} />
             <input className="input" placeholder={t("admin.nameZh")} value={editing.nameZh} onChange={(e) => setEditing({ ...editing, nameZh: e.target.value })} />
             <input className="input" placeholder={t("admin.price")} value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
+            <input className="input" placeholder={t("admin.salePrice")} value={editing.salePrice} onChange={(e) => setEditing({ ...editing, salePrice: e.target.value })} />
             <input className="input" placeholder={t("admin.category")} value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
             <input className="input" placeholder={t("admin.inventory")} value={editing.inventory} onChange={(e) => setEditing({ ...editing, inventory: e.target.value })} />
-            <input className="input" placeholder={t("admin.image")} value={editing.image} onChange={(e) => setEditing({ ...editing, image: e.target.value })} />
+            <input className="input col-span-2" placeholder={t("admin.images")} value={editing.images} onChange={(e) => setEditing({ ...editing, images: e.target.value })} />
+            <textarea className="input col-span-2" rows={2} placeholder={t("admin.descriptionEn")} value={editing.descEn} onChange={(e) => setEditing({ ...editing, descEn: e.target.value })} />
+            <textarea className="input col-span-2" rows={2} placeholder={t("admin.descriptionZh")} value={editing.descZh} onChange={(e) => setEditing({ ...editing, descZh: e.target.value })} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={editing.featured} onChange={(e) => setEditing({ ...editing, featured: e.target.checked })} />
-            {t("admin.featured")}
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={editing.featured} onChange={(e) => setEditing({ ...editing, featured: e.target.checked })} />
+              {t("admin.featured")}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} />
+              {t("admin.active")}
+            </label>
+            {editing.images.split(",").map((s) => s.trim()).filter(Boolean).length > 0 && (
+              <div className="flex gap-1">
+                {editing.images.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4).map((src, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={src} alt="" className="h-10 w-10 rounded border border-gray-200 object-cover" />
+                ))}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <button className="btn-primary" onClick={submit}>{t("admin.save")}</button>
             <button className="btn-secondary" onClick={() => setEditing(null)}>{t("admin.cancel")}</button>
@@ -252,23 +406,74 @@ export default function AdminPage() {
       )}
 
       {tab === "products" && (
-        <div className="mt-6 space-y-2">
-          {products.map((p) => (
-            <div key={p.id} className="card flex items-center justify-between p-3">
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
-                <div>
-                  <div className="font-medium text-gray-900">{p.name.en}</div>
-                  <div className="text-xs text-gray-400">${p.priceUSD} · stock {p.inventory}</div>
+        <div className="mt-4">
+          <input
+            className="input mb-3 w-full md:max-w-sm"
+            placeholder={t("admin.search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="space-y-2">
+            {shownProducts.length === 0 && <p className="text-sm text-gray-400">No products.</p>}
+            {shownProducts.map((p) => {
+              const onSale = p.salePriceUSD != null && p.salePriceUSD < p.priceUSD;
+              return (
+                <div key={p.id} className="card flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
+                    <div>
+                      <div className="font-medium text-gray-900">{p.name.en} <span className="text-xs text-gray-400">/ {p.name.zh}</span></div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                        <span className="font-mono">{p.id}</span> · {p.category}
+                        {onSale ? (
+                          <span>
+                            <span className="text-green-700 font-semibold">${Number(p.salePriceUSD).toFixed(2)}</span>{" "}
+                            <span className="line-through">${Number(p.priceUSD).toFixed(2)}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">${Number(p.priceUSD).toFixed(2)}</span>
+                        )}
+                        {p.featured && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-purple-700">NEW</span>}
+                      </div>
+                      <div className="mt-1">
+                        <StockBadge p={p} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Quick inventory adjust */}
+                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1">
+                      <span className="mr-1 text-xs text-gray-400">{t("admin.adjust") ?? "Adjust"}</span>
+                      {[-10, -1, 1, 10].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => quickAdjust(p.id, d)}
+                          className={`h-7 w-7 rounded text-sm font-bold ${d < 0 ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}
+                          title={`${d > 0 ? "+" : ""}${d}`}
+                        >
+                          {d > 0 ? `+${d}` : d}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Show/Hide toggle */}
+                    <button
+                      onClick={() => toggleActive(p)}
+                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${p.active ? "border-gray-200 text-gray-500 hover:border-red-200 hover:text-red-600" : "border-green-200 text-green-700 hover:bg-green-50"}`}
+                    >
+                      {p.active ? (t("admin.hidden") ?? "Hide") : (t("admin.active") ?? "Show")}
+                    </button>
+
+                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => startEdit(p, true)}>{t("admin.duplicate")}</button>
+                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => startEdit(p)}>{t("admin.edit")}</button>
+                    <button className="text-sm text-red-500 hover:underline" onClick={() => remove(p.id)}>{t("admin.delete")}</button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="btn-secondary" onClick={() => startEdit(p)}>{t("admin.edit")}</button>
-                <button className="text-sm text-red-500 hover:underline" onClick={() => remove(p.id)}>{t("admin.delete")}</button>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       )}
 

@@ -69,8 +69,20 @@ export function ProductCard({ product }: { product: Product }) {
         </Link>
 
         {/* Price */}
-        <div className="product-card-price">
-          {formatMoney(product.priceUSD, currency)}
+        <div className="flex items-center gap-2">
+          <div className="product-card-price">
+            {formatMoney(product.salePriceUSD ?? product.priceUSD, currency)}
+          </div>
+          {product.salePriceUSD != null && product.salePriceUSD < product.priceUSD && (
+            <>
+              <span className="text-sm text-[var(--fg-muted)] line-through">
+                {formatMoney(product.priceUSD, currency)}
+              </span>
+              <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-600">
+                -{Math.round((1 - product.salePriceUSD / product.priceUSD) * 100)}%
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

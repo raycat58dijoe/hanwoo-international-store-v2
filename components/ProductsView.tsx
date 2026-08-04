@@ -41,9 +41,10 @@ export function ProductsView({ products }: { products: Product[] }) {
 
   let filtered = cat === "all" ? products : products.filter((p) => p.category === cat);
 
-  // Sort
-  if (sort === "price-asc") filtered = [...filtered].sort((a, b) => a.priceUSD - b.priceUSD);
-  else if (sort === "price-desc") filtered = [...filtered].sort((a, b) => b.priceUSD - a.priceUSD);
+  // Sort (by effective price — sale price when set)
+  const eff = (p: Product) => p.salePriceUSD ?? p.priceUSD;
+  if (sort === "price-asc") filtered = [...filtered].sort((a, b) => eff(a) - eff(b));
+  else if (sort === "price-desc") filtered = [...filtered].sort((a, b) => eff(b) - eff(a));
 
   const toggleFilter = (key: string) => setOpenFilter(openFilter === key ? null : key);
 

@@ -75,9 +75,21 @@ export function ProductView({ product }: { product: Product }) {
             <span className="ml-1 text-xs text-[var(--fg-muted)]">(128 reviews)</span>
           </div>
 
-          <p className="mt-4 text-2xl font-bold text-[var(--fg-primary)]">
-            {formatMoney(product.priceUSD, currency)}
-          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <p className="text-2xl font-bold text-[var(--fg-primary)]">
+              {formatMoney(product.salePriceUSD ?? product.priceUSD, currency)}
+            </p>
+            {product.salePriceUSD != null && product.salePriceUSD < product.priceUSD && (
+              <>
+                <p className="text-base text-[var(--fg-muted)] line-through">
+                  {formatMoney(product.priceUSD, currency)}
+                </p>
+                <span className="rounded bg-red-100 px-2 py-0.5 text-sm font-semibold text-red-600">
+                  -{Math.round((1 - product.salePriceUSD / product.priceUSD) * 100)}%
+                </span>
+              </>
+            )}
+          </div>
 
           <p className="mt-4 text-sm leading-relaxed text-[var(--fg-secondary)]">
             {desc}
@@ -115,7 +127,7 @@ export function ProductView({ product }: { product: Product }) {
                     slug: product.slug,
                     name: product.name,
                     image: product.images[0] ?? "",
-                    priceUSD: product.priceUSD,
+                    priceUSD: product.salePriceUSD ?? product.priceUSD,
                   },
                   qty
                 );
