@@ -1,4 +1,5 @@
 import { SEED_PRODUCTS } from "./seed";
+import { queryWithSchema } from "./neon-client";
 import type { Order, Product } from "./types";
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
@@ -13,22 +14,14 @@ function memEnsure(): Product[] {
   return memProducts;
 }
 
-/* ---------- lazy-load Neon client ---------- */
-let _neonClient: any = null;
-
-async function getNeon(): Promise<any> {
-  if (!_neonClient && USE_DB) {
-    try {
-      const modName = "./neon-client";
-      _neonClient = await import(modName);
-    } catch {
-      // Import failed (build-time SSG, bundler resolution, etc.)
-      // Return null so caller falls back to in-memory.
-      // Do NOT cache failure — next request in a real server environment may succeed.
-      return null;
-    }
-  }
-  return _neonClient;
+/* ---------- Neon client wrapper ----------
+ * neon-client is statically imported (no dynamic import) so it can never fail
+ * to resolve at runtime on Vercel/serverless. When POSTGRES_URL is unset the
+ * underlying query throws, which callers catch and fall back to in-memory.
+ */
+async function getNeon(): Promise<{ queryWithSchema: typeof queryWithSchema } | null> {
+  if (!USE_DB) return null;
+  return { queryWithSchema };
 }
 
 /* ---------- row mappers ---------- */
@@ -107,11 +100,7 @@ export async function getAllOrders(): Promise<Order[]> {
   const neon = await getNeon();
   if (!neon) return memOrders.slice().reverse();
   try { return (await neon.queryWithSchema("SELECT * FROM orders ORDER BY created_at DESC")).map(rowToOrder); }
-  catch (e: any) {
-    console.error("[getAllOrders] ERROR:", e?.message);
-    // TEMP DEBUG: surface the error instead of silently returning empty
-    throw e;
-  }
+  catch { return memOrders.slice().reverse(); }
 }
 export async function getOrder(id: string): Promise<Order | undefined> {
   const neon = await getNeon();
