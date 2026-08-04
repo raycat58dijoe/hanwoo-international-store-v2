@@ -9,6 +9,9 @@ export async function GET(req: NextRequest) {
   if (key !== ADMIN_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const orders = await getAllOrders();
+  const orders = await getAllOrders().catch((e) => {
+    return { error: String(e?.message || e) } as any;
+  });
+  if ((orders as any).error) return NextResponse.json({ error: (orders as any).error, orders: [] });
   return NextResponse.json({ orders });
 }

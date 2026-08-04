@@ -107,7 +107,11 @@ export async function getAllOrders(): Promise<Order[]> {
   const neon = await getNeon();
   if (!neon) return memOrders.slice().reverse();
   try { return (await neon.queryWithSchema("SELECT * FROM orders ORDER BY created_at DESC")).map(rowToOrder); }
-  catch { return memOrders.slice().reverse(); }
+  catch (e: any) {
+    console.error("[getAllOrders] ERROR:", e?.message);
+    // TEMP DEBUG: surface the error instead of silently returning empty
+    throw e;
+  }
 }
 export async function getOrder(id: string): Promise<Order | undefined> {
   const neon = await getNeon();
