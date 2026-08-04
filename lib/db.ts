@@ -15,17 +15,16 @@ function memEnsure(): Product[] {
 
 /* ---------- lazy-load Neon client ---------- */
 let _neonClient: any = null;
-let _neonFailed = false;
 
 async function getNeon(): Promise<any> {
-  if (_neonFailed) return null; // previously failed — stay in memory mode
   if (!_neonClient && USE_DB) {
     try {
       const modName = "./neon-client";
       _neonClient = await import(modName);
     } catch {
-      _neonFailed = true; // import failed (build time, missing module, etc.)
-      console.warn("[db] Neon client unavailable — using in-memory fallback");
+      // Import failed (build-time SSG, bundler resolution, etc.)
+      // Return null so caller falls back to in-memory.
+      // Do NOT cache failure — next request in a real server environment may succeed.
       return null;
     }
   }
@@ -46,25 +45,25 @@ export async function getProducts(): Promise<Product[]> {
   const neon = await getNeon();
   if (!neon) return memEnsure().filter((p) => p.active);
   try { return (await neon.query("SELECT * FROM products WHERE active = TRUE")).map(rowToProduct); }
-  catch { _neonFailed = true; return memEnsure().filter((p) => p.active); }
+  catch { return memEnsure().filter((p) => p.active); }
 }
 export async function getAllProducts(): Promise<Product[]> {
   const neon = await getNeon();
   if (!neon) return memEnsure();
   try { return (await neon.query("SELECT * FROM products")).map(rowToProduct); }
-  catch { _neonFailed = true; return memEnsure(); }
+  catch { return memEnsure(); }
 }
 export async function getProductById(id: string): Promise<Product | undefined> {
   const neon = await getNeon();
   if (!neon) return memEnsure().find((p) => p.id === id);
   try { const rows = await neon.query("SELECT * FROM products WHERE id = $1", [id]); return rows[0] ? rowToProduct(rows[0]) : undefined; }
-  catch { _neonFailed = true; return memEnsure().find((p) => p.id === id); }
+  catch { return memEnsure().find((p) => p.id === id); }
 }
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
   const neon = await getNeon();
   if (!neon) return memEnsure().find((p) => p.slug === slug);
   try { const rows = await neon.query("SELECT * FROM products WHERE slug = $1", [slug]); return rows[0] ? rowToProduct(rows[0]) : undefined; }
-  catch { _neonFailed = true; return memEnsure().find((p) => p.slug === slug); }
+  catch { return memEnsure().find((p) => p.slug === slug); }
 }
 export async function upsertProduct(p: Product): Promise<Product[]> {
   const neon = await getNeon();
@@ -72,13 +71,13 @@ export async function upsertProduct(p: Product): Promise<Product[]> {
   try {
     await neon.query(`INSERT INTO products (id,slug,name_en,name_zh,description_en,description_zh,price_usd,images,category,inventory,featured,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug,name_en=EXCLUDED.name_en,name_zh=EXCLUDED.name_zh,description_en=EXCLUDED.description_en,description_zh=EXCLUDED.description_zh,price_usd=EXCLUDED.price_usd,images=EXCLUDED.images,category=EXCLUDED.category,inventory=EXCLUDED.inventory,featured=EXCLUDED.featured,active=EXCLUDED.active`, [p.id, p.slug, p.name.en, p.name.zh, p.description.en, p.description.zh, p.priceUSD, JSON.stringify(p.images), p.category, p.inventory, p.featured, p.active]);
     return getAllProducts();
-  } catch { _neonFailed = true; return upsertProduct(p); /* retry with memory */ }
+  } catch { return upsertProduct(p); /* fallback: retry with memory */ }
 }
 export async function deleteProduct(id: string): Promise<Product[]> {
   const neon = await getNeon();
   if (!neon) { memProducts = memEnsure().filter((x) => x.id !== id); return memProducts!; }
   try { await neon.query("DELETE FROM products WHERE id = $1", [id]); return getAllProducts(); }
-  catch { _neonFailed = true; return deleteProduct(id); /* retry with memory */ }
+  catch { return deleteProduct(id); /* fallback */ }
 }
 
 /* ---------- orders ---------- */
@@ -86,13 +85,13 @@ export async function createOrder(o: Order): Promise<Order> {
   const neon = await getNeon();
   if (!neon) { memOrders.push(o); return o; }
   try { await neon.query(`INSERT INTO orders (id,items,amount_usd,currency,customer,status,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.stripeSessionId ?? null, o.createdAt]); return o; }
-  catch { _neonFailed = true; return createOrder(o); /* retry with memory */ }
+  catch { return createOrder(o); /* fallback */ }
 }
 export async function getOrder(id: string): Promise<Order | undefined> {
   const neon = await getNeon();
   if (!neon) return memOrders.find((o) => o.id === id);
   try { const rows = await neon.query("SELECT * FROM orders WHERE id = $1", [id]); return rows[0] ? rowToOrder(rows[0]) : undefined; }
-  catch { _neonFailed = true; return memOrders.find((o) => o.id === id); }
+  catch { return memOrders.find((o) => o.id === id); }
 }
 export async function updateOrder(id: string, patch: Partial<Order>): Promise<Order | undefined> {
   const neon = await getNeon();
@@ -104,7 +103,7 @@ export async function updateOrder(id: string, patch: Partial<Order>): Promise<Or
     if (sets.length === 0) return getOrder(id);
     await neon.query("UPDATE orders SET " + sets.join(",") + " WHERE id=$" + n, [...vals, id]);
     return getOrder(id);
-  } catch { _neonFailed = true; return updateOrder(id, patch); /* retry with memory */ }
+  } catch { return updateOrder(id, patch); /* fallback */ }
 }
 
 export function genId(prefix: string): string {
