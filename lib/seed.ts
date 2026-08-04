@@ -1,0 +1,96 @@
+import type { Product } from "./types";
+
+const img = (seed: string) => `https://picsum.photos/seed/${seed}/800/800`;
+
+export const SEED_PRODUCTS: Product[] = [
+  {
+    id: "p_wireless_earbuds",
+    slug: "aurora-wireless-earbuds",
+    name: { en: "Aurora Wireless Earbuds", zh: "极光无线耳机" },
+    description: {
+      en: "Hybrid ANC, 36h battery, IPX5 water resistant. Free worldwide shipping.",
+      zh: "混合主动降噪，续航 36 小时，IPX5 防水，全球免邮。",
+    },
+    priceUSD: 59.0,
+    images: [img("earbuds1"), img("earbuds2")],
+    category: "Audio",
+    inventory: 120,
+    featured: true,
+    active: true,
+  },
+  {
+    id: "p_smart_watch",
+    slug: "pulse-smart-watch",
+    name: { en: "Pulse Smart Watch", zh: "Pulse 智能手表" },
+    description: {
+      en: "AMOLED display, heart-rate & SpO2, 14-day battery. Ships from EU/US warehouses.",
+      zh: "AMOLED 屏，心率血氧监测，14 天续航，欧美仓发货。",
+    },
+    priceUSD: 89.0,
+    images: [img("watch1"), img("watch2")],
+    category: "Wearables",
+    inventory: 80,
+    featured: true,
+    active: true,
+  },
+  {
+    id: "p_yoga_mat",
+    slug: "zen-yoga-mat",
+    name: { en: "Zen Eco Yoga Mat", zh: "Zen 环保瑜伽垫" },
+    description: {
+      en: "Natural rubber, non-slip, 6mm. Carbon-neutral shipping.",
+      zh: "天然橡胶，防滑，6mm 厚度，碳中和运输。",
+    },
+    priceUSD: 34.0,
+    images: [img("yoga1"), img("yoga2")],
+    category: "Fitness",
+    inventory: 200,
+    featured: false,
+    active: true,
+  },
+  {
+    id: "p_coffee_kit",
+    slug: "barista-travel-kit",
+    name: { en: "Barista Travel Kit", zh: "咖啡师随身套装" },
+    description: {
+      en: "Hand grinder + pour-over, aluminum case. A perfect gift.",
+      zh: "手摇磨豆机 + 手冲壶，铝制收纳盒，送礼佳品。",
+    },
+    priceUSD: 45.0,
+    images: [img("coffee1"), img("coffee2")],
+    category: "Lifestyle",
+    inventory: 150,
+    featured: true,
+    active: true,
+  },
+  {
+    id: "p_desk_lamp",
+    slug: "lumi-led-desk-lamp",
+    name: { en: "Lumi LED Desk Lamp", zh: "Lumi LED 台灯" },
+    description: {
+      en: "Eye-care dimmable, USB-C, 5 color temps. 2-year warranty.",
+      zh: "护眼可调光，USB-C 供电，5 档色温，两年质保。",
+    },
+    priceUSD: 28.0,
+    images: [img("lamp1"), img("lamp2")],
+    category: "Home",
+    inventory: 300,
+    featured: false,
+    active: true,
+  },
+  {
+    id: "p_backpack",
+    slug: "voyager-anti-theft-backpack",
+    name: { en: "Voyager Anti-Theft Backpack", zh: "Voyager 防盗背包" },
+    description: {
+      en: "USB charging port, RFID pocket, water-repellent. 30L.",
+      zh: "USB 充电口，RFID 防盗袋，防泼水，30L 容量。",
+    },
+    priceUSD: 52.0,
+    images: [img("backpack1"), img("backpack2")],
+    category: "Travel",
+    inventory: 90,
+    featured: true,
+    active: true,
+  },
+];
