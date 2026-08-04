@@ -12,19 +12,22 @@ function SuccessInner() {
   const { t, locale } = useI18n();
   const [order, setOrder] = useState<Order | null>(null);
   const [state, setState] = useState<"loading" | "paid" | "pending" | "error">("loading");
+  const method = params.get("method");
 
   useEffect(() => {
     const orderId = params.get("order_id");
     const demo = params.get("demo");
     const sessionId = params.get("session_id");
+    const method = params.get("method");
     if (!orderId) {
       setState("error");
       return;
     }
+    const body: Record<string, unknown> = demo ? { demo: true } : method === "zelle" ? { zelleConfirmed: true } : { sessionId };
     fetch(`/api/orders/${orderId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(demo ? { demo: true } : { sessionId }),
+      body: JSON.stringify(body),
     })
       .then((r) => r.json())
       .then((d) => {
@@ -61,6 +64,17 @@ function SuccessInner() {
         <p className="mt-2 text-sm text-gray-400">
           {t("success.orderId")}: <span className="font-mono">{order.id}</span>
         </p>
+
+        {method === "zelle" && state === "pending" && (
+          <div className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            {t("success.zellePending")}
+          </div>
+        )}
+        {state === "paid" && method === "zelle" && (
+          <div className="mt-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+            {t("success.zelleConfirmed")}
+          </div>
+        )}
 
         <div className="mt-6 space-y-2 text-left">
           {order.items.map((it) => (

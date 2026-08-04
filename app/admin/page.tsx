@@ -31,9 +31,11 @@ const emptyForm: FormState = {
 export default function AdminPage() {
   const { t } = useI18n();
   const [key, setKey] = useState("");
+  const [tab, setTab] = useState<"products" | "orders">("products");
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<FormState | null>(null);
   const [msg, setMsg] = useState("");
+  const [orders, setOrders] = useState<any[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("adminKey") ?? "";
@@ -45,6 +47,27 @@ export default function AdminPage() {
     const res = await fetch("/api/products");
     const data = await res.json();
     setProducts(data.products ?? []);
+  }
+
+  async function loadOrders() {
+    const res = await fetch("/api/orders", { headers: { "x-admin-key": key } });
+    const data = await res.json();
+    setOrders(data.orders ?? []);
+  }
+
+  // Load orders when switching to the orders tab
+  useEffect(() => {
+    if (tab === "orders" && key) loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, key]);
+
+  async function confirmOrder(id: string) {
+    const res = await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-admin-key": key },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    if (res.ok) loadOrders();
   }
 
   async function saveKey() {
@@ -127,14 +150,31 @@ export default function AdminPage() {
     <div className="container-page py-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{t("admin.title")}</h1>
-        <button className="btn-primary" onClick={() => startEdit()}>
-          {t("admin.new")}
+        {tab === "products" && (
+          <button className="btn-primary" onClick={() => startEdit()}>
+            {t("admin.new")}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4 flex gap-2 border-b border-gray-200">
+        <button
+          className={`px-4 py-2 text-sm font-medium ${tab === "products" ? "border-b-2 border-brand-accent text-gray-900" : "text-gray-500"}`}
+          onClick={() => setTab("products")}
+        >
+          {t("admin.products") ?? "Products"}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${tab === "orders" ? "border-b-2 border-brand-accent text-gray-900" : "text-gray-500"}`}
+          onClick={() => setTab("orders")}
+        >
+          {t("admin.orders") ?? "Orders"}
         </button>
       </div>
 
       {msg && <p className="mt-3 text-sm text-green-600">{msg}</p>}
 
-      {editing && (
+      {tab === "products" && editing && (
         <div className="card mt-4 space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3">
             <input className="input" placeholder={t("admin.nameEn")} value={editing.nameEn} onChange={(e) => setEditing({ ...editing, nameEn: e.target.value })} />
@@ -155,24 +195,79 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="mt-6 space-y-2">
-        {products.map((p) => (
-          <div key={p.id} className="card flex items-center justify-between p-3">
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
-              <div>
-                <div className="font-medium text-gray-900">{p.name.en}</div>
-                <div className="text-xs text-gray-400">${p.priceUSD} · stock {p.inventory}</div>
+      {tab === "products" && (
+        <div className="mt-6 space-y-2">
+          {products.map((p) => (
+            <div key={p.id} className="card flex items-center justify-between p-3">
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
+                <div>
+                  <div className="font-medium text-gray-900">{p.name.en}</div>
+                  <div className="text-xs text-gray-400">${p.priceUSD} · stock {p.inventory}</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-secondary" onClick={() => startEdit(p)}>{t("admin.edit")}</button>
+                <button className="text-sm text-red-500 hover:underline" onClick={() => remove(p.id)}>{t("admin.delete")}</button>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button className="btn-secondary" onClick={() => startEdit(p)}>{t("admin.edit")}</button>
-              <button className="text-sm text-red-500 hover:underline" onClick={() => remove(p.id)}>{t("admin.delete")}</button>
+          ))}
+        </div>
+      )}
+
+      {tab === "orders" && (
+        <div className="mt-6 space-y-3">
+          {orders.length === 0 && <p className="text-sm text-gray-400">No orders yet.</p>}
+          {orders.map((o: any) => (
+            <div key={o.id} className="card p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="font-mono text-sm text-gray-900">{o.id}</div>
+                  <div className="mt-1 text-xs text-gray-400">
+                    {o.customer?.name} · {o.customer?.email} · {new Date(o.createdAt).toLocaleString()}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+                      {o.paymentMethod === "zelle" ? "Zelle" : "Stripe"}
+                    </span>
+                    <span
+                      className={`rounded px-2 py-0.5 ${
+                        o.status === "paid"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {o.status}
+                    </span>
+                    {o.paymentMethod === "zelle" && o.zelleConfirmed && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700">customer says paid</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-gray-900">${Number(o.amountUSD).toFixed(2)}</div>
+                  {o.status !== "paid" && (
+                    <button
+                      className="btn-primary mt-2 px-3 py-1.5 text-sm"
+                      onClick={() => confirmOrder(o.id)}
+                    >
+                      {t("admin.confirmPayment") ?? "Confirm payment"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 border-t pt-3 text-xs text-gray-500">
+                {o.items?.map((it: any, i: number) => (
+                  <span key={i} className="mr-3">
+                    {it.name?.en} × {it.qty}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

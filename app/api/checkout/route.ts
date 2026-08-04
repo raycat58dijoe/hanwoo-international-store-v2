@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProductById, createOrder, updateOrder, genId } from "@/lib/db";
 import { convert, RATES } from "@/lib/currency";
 import { getStripe } from "@/lib/stripe";
-import type { Order, OrderItem, Product } from "@/lib/types";
+import type { Order, OrderItem, Product, PaymentMethod } from "@/lib/types";
+
+// Merchant's enrolled Zelle identifier (email or US phone). Set via the
+// ZELLE_ID env var on Vercel; falls back to a clearly-marked placeholder so
+// the UI still renders during local/dev.
+const ZELLE_ID = process.env.ZELLE_ID || "set-via-ZELLE_ID-env";
 
 function toMinor(usd: number, currency: string): number {
   const v = convert(usd, currency);
@@ -16,6 +21,7 @@ export async function POST(req: NextRequest) {
     const items = body.items as { productId: string; qty: number }[];
     const customer = body.customer as Order["customer"];
     const currency = (body.currency as string) || "USD";
+    const method = (body.method as PaymentMethod) || "stripe";
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
@@ -55,10 +61,26 @@ export async function POST(req: NextRequest) {
       currency,
       customer,
       status: "pending",
+      paymentMethod: method,
       createdAt: new Date().toISOString(),
     };
     await createOrder(order);
 
+    // ---------- Zelle: manual bank transfer (no API / no redirect) ----------
+    if (method === "zelle") {
+      return NextResponse.json({
+        orderId: order.id,
+        method: "zelle",
+        zelle: {
+          id: ZELLE_ID,
+          amountUSD,
+          currency,
+          orderId: order.id,
+        },
+      });
+    }
+
+    // ---------- Stripe Checkout (instant, automatic confirmation) ----------
     const stripe = getStripe();
     // Prefer the configured production domain for redirects; fall back to the
     // request origin (handy in local/dev where NEXT_PUBLIC_SITE_URL may be unset).

@@ -37,7 +37,7 @@ function rowToProduct(r: any): Product {
   return { id: r.id, slug: r.slug, name: { en: r.name_en, zh: r.name_zh }, description: { en: r.description_en, zh: r.description_zh }, priceUSD: Number(r.price_usd), images, category: r.category, inventory: Number(r.inventory), featured: r.featured, active: r.active };
 }
 function rowToOrder(r: any): Order {
-  return { id: r.id, items: typeof r.items === "string" ? JSON.parse(r.items) : r.items || [], amountUSD: Number(r.amount_usd), currency: r.currency, customer: typeof r.customer === "string" ? JSON.parse(r.customer) : r.customer, status: r.status, stripeSessionId: r.stripe_session_id ?? undefined, createdAt: r.created_at };
+  return { id: r.id, items: typeof r.items === "string" ? JSON.parse(r.items) : r.items || [], amountUSD: Number(r.amount_usd), currency: r.currency, customer: typeof r.customer === "string" ? JSON.parse(r.customer) : r.customer, status: r.status, paymentMethod: (r.payment_method as Order["paymentMethod"]) || "stripe", zelleConfirmed: Boolean(r.zelle_confirmed), stripeSessionId: r.stripe_session_id ?? undefined, createdAt: r.created_at };
 }
 
 /* ---------- products ---------- */
@@ -84,8 +84,15 @@ export async function deleteProduct(id: string): Promise<Product[]> {
 export async function createOrder(o: Order): Promise<Order> {
   const neon = await getNeon();
   if (!neon) { memOrders.push(o); return o; }
-  try { await neon.queryWithSchema(`INSERT INTO orders (id,items,amount_usd,currency,customer,status,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.stripeSessionId ?? null, o.createdAt]); return o; }
+  try { await neon.queryWithSchema(`INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.createdAt]); return o; }
   catch { return createOrder(o); }
+}
+
+export async function getAllOrders(): Promise<Order[]> {
+  const neon = await getNeon();
+  if (!neon) return memOrders.slice().reverse();
+  try { return (await neon.queryWithSchema("SELECT * FROM orders ORDER BY created_at DESC")).map(rowToOrder); }
+  catch { return memOrders.slice().reverse(); }
 }
 export async function getOrder(id: string): Promise<Order | undefined> {
   const neon = await getNeon();
@@ -100,6 +107,7 @@ export async function updateOrder(id: string, patch: Partial<Order>): Promise<Or
     const sets: string[] = []; const vals: any[] = []; let n = 1;
     if (patch.status !== undefined) { sets.push("status=$" + n++); vals.push(patch.status); }
     if (patch.stripeSessionId !== undefined) { sets.push("stripe_session_id=$" + n++); vals.push(patch.stripeSessionId); }
+    if (patch.zelleConfirmed !== undefined) { sets.push("zelle_confirmed=$" + n++); vals.push(patch.zelleConfirmed); }
     if (sets.length === 0) return getOrder(id);
     await neon.queryWithSchema("UPDATE orders SET " + sets.join(",") + " WHERE id=$" + n, [...vals, id]);
     return getOrder(id);

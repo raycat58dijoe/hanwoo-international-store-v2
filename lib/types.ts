@@ -22,6 +22,8 @@ export interface OrderItem {
   qty: number;
 }
 
+export type PaymentMethod = "stripe" | "zelle";
+
 export interface Order {
   id: string;
   items: OrderItem[];
@@ -36,6 +38,10 @@ export interface Order {
     zip: string;
   };
   status: "pending" | "paid" | "failed";
+  /** Which payment method the customer chose at checkout. */
+  paymentMethod?: PaymentMethod;
+  /** Zelle only: customer has told us they sent the transfer (awaiting our confirmation). */
+  zelleConfirmed?: boolean;
   stripeSessionId?: string;
   createdAt: string;
 }

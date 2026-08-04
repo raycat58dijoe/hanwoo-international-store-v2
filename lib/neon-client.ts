@@ -52,9 +52,14 @@ function ensureSchema(): Promise<void> {
         currency TEXT DEFAULT 'USD',
         customer JSONB NOT NULL,
         status TEXT DEFAULT 'pending',
+        payment_method TEXT DEFAULT 'stripe',
+        zelle_confirmed BOOLEAN DEFAULT FALSE,
         stripe_session_id TEXT,
         created_at TEXT NOT NULL
       )`);
+      // Idempotent: add columns if an older table already exists
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'stripe'`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS zelle_confirmed BOOLEAN DEFAULT FALSE`);
 
       // Dynamic import of seed to avoid circular deps
       const { SEED_PRODUCTS } = await import("./seed");
