@@ -72,7 +72,7 @@ export function ProductView({ product }: { product: Product }) {
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             ))}
-            <span className="ml-1 text-xs text-[var(--fg-muted)]">(128 reviews)</span>
+            <span className="ml-1 text-xs text-[var(--fg-muted)]">(5.0)</span>
           </div>
 
           <div className="mt-4 flex items-center gap-3">

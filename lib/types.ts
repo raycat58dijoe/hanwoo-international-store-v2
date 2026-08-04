@@ -68,6 +68,8 @@ export interface Order {
   trackingUrl?: string;
   /** ISO timestamp when the order was handed to the carrier. */
   shippedAt?: string;
+  /** Shipping fee in USD (0 = free shipping). */
+  shippingUSD?: number;
   /** Internal admin note (not shown to customer). */
   note?: string;
 }

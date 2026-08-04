@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProductById, createOrder, updateOrder, genId } from "@/lib/db";
-import { convert, RATES } from "@/lib/currency";
 import { getStripe } from "@/lib/stripe";
+import { calcShippingUSD } from "@/lib/shipping";
 import type { Order, OrderItem, Product, PaymentMethod } from "@/lib/types";
 
 // Merchant's enrolled Zelle identifier (email or US phone). Set via the
@@ -9,10 +9,13 @@ import type { Order, OrderItem, Product, PaymentMethod } from "@/lib/types";
 // the UI still renders during local/dev.
 const ZELLE_ID = process.env.ZELLE_ID || "set-via-ZELLE_ID-env";
 
+// All payments are collected in USD regardless of the display currency,
+// so exchange-rate risk is avoided.
+const SETTLE_CURRENCY = "USD";
+
 function toMinor(usd: number, currency: string): number {
-  const v = convert(usd, currency);
   const decimals = currency === "JPY" ? 0 : 2;
-  return Math.round(v * 10 ** decimals);
+  return Math.round(usd * 10 ** decimals);
 }
 
 export async function POST(req: NextRequest) {
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     const orderItems: OrderItem[] = [];
-    let amountUSD = 0;
+    let subtotalUSD = 0;
 
     for (const it of items) {
       const p: Product | undefined = await getProductById(it.productId);
@@ -53,8 +56,11 @@ export async function POST(req: NextRequest) {
         priceUSD: unitUSD,
         qty: it.qty,
       });
-      amountUSD += unitUSD * it.qty;
+      subtotalUSD += unitUSD * it.qty;
     }
+
+    const shippingUSD = calcShippingUSD(subtotalUSD);
+    const amountUSD = subtotalUSD + shippingUSD;
 
     const order: Order = {
       id: genId("ord"),
@@ -64,6 +70,7 @@ export async function POST(req: NextRequest) {
       customer,
       status: "pending",
       paymentMethod: method,
+      shippingUSD,
       createdAt: new Date().toISOString(),
     };
     await createOrder(order);
@@ -76,9 +83,11 @@ export async function POST(req: NextRequest) {
         zelle: {
           id: ZELLE_ID,
           amountUSD,
-          currency,
+          currency: SETTLE_CURRENCY,
           orderId: order.id,
         },
+        shippingUSD,
+        subtotalUSD,
       });
     }
 
@@ -90,30 +99,41 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
       req.nextUrl.origin;
     if (stripe) {
+      const line_items = orderItems.map((oi) => ({
+        quantity: oi.qty,
+        price_data: {
+          currency: SETTLE_CURRENCY.toLowerCase(),
+          unit_amount: toMinor(oi.priceUSD, SETTLE_CURRENCY),
+          product_data: {
+            name: oi.name.en,
+            images: oi.image ? [oi.image] : [],
+          },
+        },
+      }));
+      if (shippingUSD > 0) {
+        line_items.push({
+          quantity: 1,
+          price_data: {
+            currency: SETTLE_CURRENCY.toLowerCase(),
+            unit_amount: toMinor(shippingUSD, SETTLE_CURRENCY),
+            product_data: { name: "International shipping", images: [] },
+          },
+        });
+      }
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
         customer_email: customer.email,
-        line_items: orderItems.map((oi) => ({
-          quantity: oi.qty,
-          price_data: {
-            currency: currency.toLowerCase(),
-            unit_amount: toMinor(oi.priceUSD, currency),
-            product_data: {
-              name: oi.name.en,
-              images: oi.image ? [oi.image] : undefined,
-            },
-          },
-        })),
+        line_items,
         metadata: { orderId: order.id },
         success_url: `${siteUrl}/checkout/success?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${siteUrl}/cart`,
       });
       await updateOrder(order.id, { stripeSessionId: session.id });
-      return NextResponse.json({ orderId: order.id, url: session.url });
+      return NextResponse.json({ orderId: order.id, url: session.url, shippingUSD, subtotalUSD });
     }
 
     // Demo mode: no Stripe key configured.
-    return NextResponse.json({ orderId: order.id, demo: true });
+    return NextResponse.json({ orderId: order.id, demo: true, shippingUSD, subtotalUSD });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Checkout failed" }, { status: 500 });
   }

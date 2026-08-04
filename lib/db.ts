@@ -45,6 +45,7 @@ function rowToOrder(r: any): Order {
     trackingNumber: r.tracking_number ?? undefined,
     trackingUrl: r.tracking_url ?? undefined,
     shippedAt: r.shipped_at ?? undefined,
+    shippingUSD: r.shipping_usd != null ? Number(r.shipping_usd) : undefined,
     note: r.note ?? undefined,
   };
 }
@@ -103,8 +104,8 @@ export async function createOrder(o: Order): Promise<Order> {
   if (!neon) { memOrders.push(o); return o; }
   try {
     await neon.queryWithSchema(
-      `INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.createdAt]
+      `INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,shipping_usd,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.shippingUSD ?? 0, o.createdAt]
     );
     return o;
   } catch (e: any) {

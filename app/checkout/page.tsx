@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n, CURRENCIES } from "@/components/I18nProvider";
 import { useCart } from "@/components/CartProvider";
 import { formatMoney } from "@/lib/currency";
+import { SHIPPING_THRESHOLD, SHIPPING_FLAT_USD } from "@/lib/shipping";
 import type { PaymentMethod } from "@/lib/types";
 
 export default function CheckoutPage() {
@@ -256,10 +257,23 @@ export default function CheckoutPage() {
             </div>
           ))}
         </div>
-        <div className="mt-4 flex justify-between border-t pt-4 font-bold text-gray-900">
-          <span>{t("cart.subtotal")}</span>
-          <span>{formatMoney(totalUSD, currency)}</span>
+        <div className="mt-4 space-y-2 border-t pt-3 text-sm">
+          <div className="flex justify-between text-gray-600">
+            <span>{t("cart.subtotal")}</span>
+            <span>{formatMoney(totalUSD, currency)}</span>
+          </div>
+          <div className="flex justify-between text-gray-600">
+            <span>{t("checkout.shipping")}</span>
+            <span>{totalUSD >= SHIPPING_THRESHOLD ? (t("checkout.shippingFree") ?? "Free") : formatMoney(SHIPPING_FLAT_USD, currency)}</span>
+          </div>
+          <div className="flex justify-between border-t pt-2 font-bold text-gray-900">
+            <span>Total</span>
+            <span>{formatMoney(totalUSD + (totalUSD >= SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT_USD), currency)}</span>
+          </div>
         </div>
+        <p className="mt-3 text-xs text-gray-400">
+          {t("checkout.processedInUSD") ?? "Payments are processed in USD."}
+        </p>
       </div>
     </div>
   );

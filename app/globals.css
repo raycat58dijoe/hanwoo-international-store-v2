@@ -480,6 +480,34 @@ body {
   padding: 1.5rem;
 }
 
+/* ---- Generic card (admin / cart / checkout / track) ---- */
+.card {
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- Secondary button (admin / checkout) ---- */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: .85rem;
+  font-weight: 600;
+  padding: .6rem 1.4rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.btn-secondary:hover {
+  border-color: var(--fg-secondary);
+  background: var(--bg-subtle);
+}
+
 /* ---- Utility ---- */
 .text-accent { color: var(--accent); }
 .bg-accent { background-color: var(--accent); }

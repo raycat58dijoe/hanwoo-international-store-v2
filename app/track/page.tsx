@@ -120,6 +120,12 @@ function TrackInner() {
                 <span>{formatMoney(it.priceUSD * it.qty, order.currency)}</span>
               </div>
             ))}
+            {order.shippingUSD != null && (
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>{t("checkout.shipping") ?? "Shipping"}</span>
+                <span>{order.shippingUSD === 0 ? (t("checkout.shippingFree") ?? "Free") : formatMoney(order.shippingUSD, order.currency)}</span>
+              </div>
+            )}
             <div className="flex justify-between border-t pt-2 font-bold text-gray-900">
               <span>Total</span>
               <span>{formatMoney(order.amountUSD, order.currency)}</span>

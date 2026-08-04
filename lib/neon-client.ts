@@ -76,6 +76,7 @@ function ensureSchema(): Promise<void> {
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_usd NUMERIC(10,2) DEFAULT 0`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS note TEXT`);
 
       // Dynamic import of seed to avoid circular deps

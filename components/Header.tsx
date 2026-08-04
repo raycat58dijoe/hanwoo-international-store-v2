@@ -1,18 +1,39 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useI18n, CURRENCIES } from "./I18nProvider";
 import { useCart } from "./CartProvider";
 
 export function Header() {
   const { t, locale, setLocale, currency, setCurrency } = useI18n();
   const { count } = useCart();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  const submitSearch = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const term = q.trim();
+    setSearchOpen(false);
+    setMobileOpen(false);
+    router.push(term ? `/products?q=${encodeURIComponent(term)}` : "/products");
+  };
+
+  const navLinks = [
+    { href: "/", label: t("nav.home") },
+    { href: "/products", label: t("nav.shop") },
+    { href: "/products?category=featured", label: t("nav.featured") },
+    { href: "/track", label: "Track Order" },
+  ];
 
   return (
     <>
       {/* Announcement bar */}
       <div className="announcement-bar">
-        Click here for international updates &nbsp;|&nbsp; Free international shipping for orders above US$80 (not applicable for orders with power banks)
+        Free international shipping for orders above US$80 (not applicable for orders with power banks)
       </div>
 
       {/* Main navbar */}
@@ -23,13 +44,11 @@ export function Header() {
             HANWOO
           </Link>
 
-          {/* Navigation links */}
+          {/* Navigation links (desktop) */}
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
-            <Link href="/">{t("nav.home")}</Link>
-            <Link href="/products">{t("nav.shop")}</Link>
-            <Link href="/products?category=featured">{t("nav.featured")}</Link>
-            <Link href="/products?category=device">{t("nav.device")}</Link>
-            <Link href="/products">{t("nav.collection")}</Link>
+            {navLinks.map((l) => (
+              <Link key={l.href} href={l.href}>{l.label}</Link>
+            ))}
           </nav>
 
           {/* Right side icons */}
@@ -57,12 +76,29 @@ export function Header() {
               {locale === "en" ? "EN" : "中"}
             </button>
 
-            {/* Search icon */}
-            <span className="nav-icon-btn" title="Search">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-              </svg>
-            </span>
+            {/* Search */}
+            {searchOpen ? (
+              <form onSubmit={submitSearch} className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={t("search.placeholder") ?? "Search products…"}
+                  className="w-36 sm:w-52 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs text-white outline-none placeholder:text-white/50"
+                />
+                <button type="submit" className="nav-icon-btn" title="Search">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                  </svg>
+                </button>
+              </form>
+            ) : (
+              <button className="nav-icon-btn hidden sm:inline-flex" title="Search" onClick={() => setSearchOpen(true)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+              </button>
+            )}
 
             {/* Cart */}
             <Link href="/cart" className="nav-icon-btn relative" title={t("nav.cart")}>
@@ -87,13 +123,55 @@ export function Header() {
             </Link>
 
             {/* Mobile menu button */}
-            <button className="nav-icon-btn md:hidden" id="mobile-menu-btn">
+            <button
+              className="nav-icon-btn md:hidden"
+              aria-label="Menu"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                {mobileOpen ? (
+                  <path d="M6 6l12 12M18 6L6 18"/>
+                ) : (
+                  <path d="M3 6h18M3 12h18M3 18h18"/>
+                )}
               </svg>
             </button>
           </div>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {mobileOpen && (
+          <div className="md:hidden border-t border-white/10 bg-[var(--bg-dark)]">
+            <div className="container-page flex flex-col gap-1 py-3">
+              <form onSubmit={submitSearch} className="flex gap-2 pb-2">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={t("search.placeholder") ?? "Search products…"}
+                  className="flex-1 rounded border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/50"
+                />
+                <button className="rounded bg-white/10 px-3 py-2 text-sm text-white">Go</button>
+              </form>
+              {navLinks.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded px-2 py-2 text-sm text-[var(--fg-on-dark-muted)] hover:text-white hover:bg-white/5"
+                >
+                  {l.label}
+                </Link>
+              ))}
+              <Link
+                href="/admin"
+                onClick={() => setMobileOpen(false)}
+                className="rounded px-2 py-2 text-sm text-[var(--fg-on-dark-muted)] hover:text-white hover:bg-white/5"
+              >
+                {t("nav.admin")}
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
     </>
   );

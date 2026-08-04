@@ -337,6 +337,33 @@ export default function AdminPage() {
     return new Date(iso).toLocaleDateString();
   }
 
+  // ---------- orders CSV export ----------
+  function exportOrdersCSV() {
+    const rows = [
+      ["Order ID", "Date", "Customer", "Email", "Items", "Subtotal (USD)", "Shipping (USD)", "Total (USD)", "Status", "Payment", "Tracking"],
+      ...orders.map((o) => [
+        o.id,
+        new Date(o.createdAt).toISOString(),
+        o.customer?.name ?? "",
+        o.customer?.email ?? "",
+        (o.items ?? []).map((it) => `${it.name?.en ?? it.productId} x${it.qty}`).join(" | "),
+        (Number(o.amountUSD) - Number(o.shippingUSD ?? 0)).toFixed(2),
+        Number(o.shippingUSD ?? 0).toFixed(2),
+        Number(o.amountUSD).toFixed(2),
+        o.status,
+        o.paymentMethod ?? "",
+        o.trackingNumber ?? "",
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   function StockBadge({ p }: { p: Product }) {
     if (!p.active) return <span className="rounded bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">{t("admin.hidden")}</span>;
     if (p.inventory === 0) return <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">{t("admin.outOfStock")}</span>;
@@ -674,7 +701,16 @@ export default function AdminPage() {
 
       {/* ============ ORDERS ============ */}
       {tab === "orders" && (
-        <div className="mt-6 space-y-3">
+        <div className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm text-gray-400">{orders.length} orders</span>
+            {orders.length > 0 && (
+              <button className="btn-secondary px-3 py-2 text-sm" onClick={exportOrdersCSV}>
+                ⬇ {t("admin.exportCSV") ?? "Export CSV"}
+              </button>
+            )}
+          </div>
+          <div className="space-y-3">
           {orders.length === 0 && <p className="text-sm text-gray-400">No orders yet.</p>}
           {orders.map((o) => {
             const open = detailId === o.id;
@@ -729,6 +765,16 @@ export default function AdminPage() {
                           <span className="text-gray-400">${Number(it.priceUSD).toFixed(2)}</span>
                         </div>
                       ))}
+                      {o.shippingUSD != null && (
+                        <div className="mt-1 flex justify-between text-xs text-gray-500">
+                          <span>Shipping</span>
+                          <span>{o.shippingUSD === 0 ? "Free" : `$${Number(o.shippingUSD).toFixed(2)}`}</span>
+                        </div>
+                      )}
+                      <div className="mt-1 flex justify-between font-semibold text-gray-900">
+                        <span>Total</span>
+                        <span>${Number(o.amountUSD).toFixed(2)}</span>
+                      </div>
                     </div>
                     <div>
                       <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Ship to</div>
@@ -796,6 +842,7 @@ export default function AdminPage() {
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

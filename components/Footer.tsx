@@ -39,10 +39,9 @@ export function Footer() {
             <h4 className="footer-heading">Support</h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/track">Track Order</Link></li>
-              <li><a href="#">Shipping Info</a></li>
-              <li><a href="#">Returns & Warranty</a></li>
-              <li><a href="#">FAQ</a></li>
-              <li><a href="#">Contact Us</a></li>
+              <li><Link href="/shipping">Shipping Info</Link></li>
+              <li><Link href="/returns">Returns & Warranty</Link></li>
+              <li><Link href="/contact">Contact Us</Link></li>
             </ul>
           </div>
 
@@ -50,10 +49,10 @@ export function Footer() {
           <div>
             <h4 className="footer-heading">Company</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#">About Us</a></li>
-              <li><a href="#">Wholesale</a></li>
-              <li><a href="#">Privacy Policy</a></li>
-              <li><a href="#">Terms of Service</a></li>
+              <li><Link href="/contact">About Us</Link></li>
+              <li><Link href="/contact">Wholesale</Link></li>
+              <li><Link href="/privacy">Privacy Policy</Link></li>
+              <li><Link href="/terms">Terms of Service</Link></li>
             </ul>
           </div>
         </div>
@@ -62,12 +61,8 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-3 pt-6 text-xs text-[var(--fg-on-dark-muted)] sm:flex-row">
           <span>© {year} Hanwoo International Inc. {t("footer.rights")}</span>
           <div className="flex items-center gap-3 opacity-60">
-            {/* Payment method icons (SVG placeholders) */}
-            <span className="font-bold tracking-wide">VISA</span>
-            <span className="font-bold tracking-wide">MC</span>
-            <span className="font-bold tracking-wide">AMEX</span>
-            <span className="font-bold tracking-wide">PayPal</span>
             <span className="font-bold tracking-wide">Stripe</span>
+            <span className="font-bold tracking-wide">Zelle</span>
           </div>
         </div>
       </div>

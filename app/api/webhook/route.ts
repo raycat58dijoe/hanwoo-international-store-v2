@@ -15,10 +15,13 @@ export async function POST(req: NextRequest) {
 
   let event;
   try {
+    // SECURITY: always require a valid signature in production. Without a
+    // configured webhook secret we refuse to process anything, so attackers
+    // can never forge a "checkout.session.completed" event.
     if (STRIPE_WEBHOOK_SECRET && sig) {
       event = stripe.webhooks.constructEvent(raw, sig, STRIPE_WEBHOOK_SECRET);
     } else {
-      event = JSON.parse(raw); // local/dev without signature verification
+      return NextResponse.json({ error: "Webhook signature verification not configured" }, { status: 400 });
     }
   } catch (err: any) {
     return NextResponse.json({ error: `Webhook error: ${err?.message}` }, { status: 400 });

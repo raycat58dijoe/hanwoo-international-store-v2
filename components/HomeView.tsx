@@ -9,6 +9,7 @@ export function HomeView({ products }: { products: Product[] }) {
   const { t } = useI18n();
   const featured = products.filter((p) => p.featured).slice(0, 6);
   const bestSellers = products.slice(0, 6);
+  const categories = Array.from(new Set(products.map((p) => p.category))).sort().slice(0, 8);
 
   return (
     <div>
@@ -40,8 +41,8 @@ export function HomeView({ products }: { products: Product[] }) {
               <Link href="/products" className="btn-primary">
                 {t("home.shopNow")} →
               </Link>
-              <Link href="/products?category=best-seller" className="btn-dark">
-                Best Sellers
+              <Link href="/products?category=featured" className="btn-dark">
+                {t("nav.featured") ?? "Featured"}
               </Link>
             </div>
           </div>
@@ -59,42 +60,27 @@ export function HomeView({ products }: { products: Product[] }) {
       <section className="container-page pb-16">
         <div className="flex items-end justify-between mb-8">
           <h2 className="section-title">Best Seller</h2>
-          <button className="sort-dropdown">
-            Sort by <span className="ml-1">▾</span>
-          </button>
+          <Link href="/products" className="sort-dropdown">
+            {t("home.viewAll")} →
+          </Link>
         </div>
 
         <div className="flex gap-8">
-          {/* Sidebar filters (desktop) */}
+          {/* Category quick links (desktop) */}
           <aside className="filter-sidebar hidden lg:block">
-            <div className="filter-header">Filter</div>
-
-            {[
-              { label: "Show All", key: "all" },
-              { label: "Built", key: "built" },
-              { label: "Capacity", key: "capacity" },
-              { label: "Category", key: "category" },
-              { label: "Connector", key: "connector" },
-              { label: "Device", key: "device" },
-              { label: "Feature", key: "feature" },
-              { label: "Length", key: "length" },
-              { label: "Type", key: "type" },
-            ].map((group) => (
-              <div key={group.key} className="filter-group">
-                <div className="filter-group-title">{group.label}</div>
-                <div className="filter-options">
-                  <label className="filter-option">
-                    <input type="checkbox" /> Option A
-                  </label>
-                  <label className="filter-option">
-                    <input type="checkbox" /> Option B
-                  </label>
-                  <label className="filter-option">
-                    <input type="checkbox" /> Option C
-                  </label>
-                </div>
-              </div>
+            <div className="filter-header">Shop by Category</div>
+            {categories.map((c) => (
+              <Link
+                key={c}
+                href={`/products?category=${encodeURIComponent(c)}`}
+                className="filter-option block"
+              >
+                {c}
+              </Link>
             ))}
+            <Link href="/products" className="filter-option block font-medium">
+              View all →
+            </Link>
           </aside>
 
           {/* Product grid */}
