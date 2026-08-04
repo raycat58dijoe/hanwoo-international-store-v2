@@ -11,6 +11,6 @@ export async function DELETE(
   if (key !== ADMIN_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const products = deleteProduct(params.id);
+  const products = await deleteProduct(params.id);
   return NextResponse.json({ products });
 }

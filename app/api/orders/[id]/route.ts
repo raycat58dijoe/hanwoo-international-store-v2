@@ -6,7 +6,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const order = getOrder(params.id);
+  const order = await getOrder(params.id);
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ order });
 }
@@ -15,21 +15,21 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const order = getOrder(params.id);
+  const order = await getOrder(params.id);
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
   const stripe = getStripe();
 
   if (body.demo) {
-    const updated = updateOrder(order.id, { status: "paid" });
+    const updated = await updateOrder(order.id, { status: "paid" });
     return NextResponse.json({ order: updated });
   }
 
   if (body.sessionId && stripe) {
     const session = await stripe.checkout.sessions.retrieve(body.sessionId);
     if (session.payment_status === "paid") {
-      const updated = updateOrder(order.id, {
+      const updated = await updateOrder(order.id, {
         status: "paid",
         stripeSessionId: session.id,
       });

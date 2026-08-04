@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const orderId = session.metadata?.orderId;
-    if (orderId && getOrder(orderId)) {
-      updateOrder(orderId, { status: "paid", stripeSessionId: session.id });
+    if (orderId && (await getOrder(orderId))) {
+      await updateOrder(orderId, { status: "paid", stripeSessionId: session.id });
     }
   }
 

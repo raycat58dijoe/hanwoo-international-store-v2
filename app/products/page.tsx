@@ -1,7 +1,7 @@
 import { getProducts } from "@/lib/db";
 import { ProductsView } from "@/components/ProductsView";
 
-export default function ProductsPage() {
-  const products = getProducts();
+export default async function ProductsPage() {
+  const products = await getProducts();
   return <ProductsView products={products} />;
 }

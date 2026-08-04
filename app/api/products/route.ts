@@ -5,7 +5,7 @@ import type { Product } from "@/lib/types";
 const ADMIN_KEY = process.env.ADMIN_KEY ?? "admin123";
 
 export async function GET() {
-  return NextResponse.json({ products: getAllProducts() });
+  return NextResponse.json({ products: await getAllProducts() });
 }
 
 export async function POST(req: NextRequest) {
@@ -29,6 +29,6 @@ export async function POST(req: NextRequest) {
     featured: Boolean(body.featured),
     active: body.active !== false,
   };
-  const products = upsertProduct(product);
+  const products = await upsertProduct(product);
   return NextResponse.json({ products });
 }

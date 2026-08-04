@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     let amountUSD = 0;
 
     for (const it of items) {
-      const p: Product | undefined = getProductById(it.productId);
+      const p: Product | undefined = await getProductById(it.productId);
       if (!p || !p.active) {
         return NextResponse.json(
           { error: `Product unavailable: ${it.productId}` },
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       status: "pending",
       createdAt: new Date().toISOString(),
     };
-    createOrder(order);
+    await createOrder(order);
 
     const stripe = getStripe();
     // Prefer the configured production domain for redirects; fall back to the
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         success_url: `${siteUrl}/checkout/success?order_id=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${siteUrl}/cart`,
       });
-      updateOrder(order.id, { stripeSessionId: session.id });
+      await updateOrder(order.id, { stripeSessionId: session.id });
       return NextResponse.json({ orderId: order.id, url: session.url });
     }
 
