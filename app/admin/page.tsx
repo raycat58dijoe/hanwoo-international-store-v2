@@ -13,6 +13,8 @@ interface FormState {
   descZh: string;
   price: string;
   salePrice: string;
+  sku: string;
+  tags: string;
   category: string;
   inventory: string;
   images: string;
@@ -29,6 +31,8 @@ const emptyForm: FormState = {
   descZh: "",
   price: "",
   salePrice: "",
+  sku: "",
+  tags: "",
   category: "General",
   inventory: "0",
   images: "",
@@ -65,6 +69,11 @@ export default function AdminPage() {
   const [shipForm, setShipForm] = useState<Record<string, { tracking: string; url: string }>>({});
   const [noteForm, setNoteForm] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "hidden" | "low" | "out">("all");
+  const [catFilter, setCatFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<"updatedAt" | "name" | "price" | "inventory">("updatedAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sel, setSel] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const saved = localStorage.getItem("adminKey") ?? "";
@@ -105,6 +114,8 @@ export default function AdminPage() {
       description: { en: editing.descEn, zh: editing.descZh },
       priceUSD: Number(editing.price) || 0,
       salePriceUSD: editing.salePrice ? Number(editing.salePrice) : undefined,
+      sku: editing.sku.trim() || undefined,
+      tags: editing.tags.split(",").map((s) => s.trim()).filter(Boolean),
       category: editing.category || "General",
       inventory: Number(editing.inventory) || 0,
       images: editing.images.split(",").map((s) => s.trim()).filter(Boolean),
@@ -160,6 +171,8 @@ export default function AdminPage() {
       descZh: p.description?.zh ?? "",
       price: String(p.priceUSD),
       salePrice: p.salePriceUSD != null ? String(p.salePriceUSD) : "",
+      sku: p.sku ?? "",
+      tags: (p.tags ?? []).join(", "),
       category: p.category,
       inventory: String(p.inventory),
       images: p.images.join(", "),
@@ -225,13 +238,104 @@ export default function AdminPage() {
     return [...map.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [orders]);
 
-  // search filter
+  // ---------- filter / sort pipeline ----------
   const q = search.trim().toLowerCase();
-  const shownProducts = q
-    ? products.filter((p) =>
-        [p.id, p.slug, p.name.en, p.name.zh, p.category].some((s) => s?.toLowerCase().includes(q))
-      )
-    : products;
+  const categories = useMemo(() => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(), [products]);
+  const effPrice = (p: Product) => p.salePriceUSD ?? p.priceUSD;
+
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = { all: products.length, active: 0, hidden: 0, low: 0, out: 0 };
+    for (const p of products) {
+      if (p.active) { c.active++; if (p.inventory === 0) c.out++; else if (p.inventory <= LOW_STOCK_THRESHOLD) c.low++; }
+      else c.hidden++;
+    }
+    return c;
+  }, [products]);
+
+  const shownProducts = useMemo(() => {
+    let list = products.filter((p) => {
+      if (statusFilter === "active" && !p.active) return false;
+      if (statusFilter === "hidden" && p.active) return false;
+      if (statusFilter === "low" && !(p.active && p.inventory > 0 && p.inventory <= LOW_STOCK_THRESHOLD)) return false;
+      if (statusFilter === "out" && !(p.active && p.inventory === 0)) return false;
+      if (catFilter !== "all" && p.category !== catFilter) return false;
+      if (q && ![p.id, p.slug, p.name.en, p.name.zh, p.category, p.sku ?? ""].some((s) => s?.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    const dir = sortDir === "asc" ? 1 : -1;
+    list = [...list].sort((a, b) => {
+      switch (sortKey) {
+        case "name": return dir * (a.name.en.localeCompare(b.name.en));
+        case "price": return dir * (effPrice(a) - effPrice(b));
+        case "inventory": return dir * (a.inventory - b.inventory);
+        default: return dir * ((a.updatedAt ?? "").localeCompare(b.updatedAt ?? ""));
+      }
+    });
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, statusFilter, catFilter, q, sortKey, sortDir]);
+
+  function toggleSort(key: "updatedAt" | "name" | "price" | "inventory") {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+  const SortIcon = ({ k }: { k: "updatedAt" | "name" | "price" | "inventory" }) =>
+    sortKey === k ? <span className="ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span> : <span className="ml-0.5 text-gray-300">↕</span>;
+
+  // ---------- batch operations ----------
+  const allShownSelected = shownProducts.length > 0 && shownProducts.every((p) => sel.has(p.id));
+  function toggleSelectAll() {
+    setSel(allShownSelected ? new Set() : new Set(shownProducts.map((p) => p.id)));
+  }
+  function toggleSelect(id: string) {
+    const s = new Set(sel);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    setSel(s);
+  }
+  async function batchActive(active: boolean) {
+    if (sel.size === 0) return;
+    await Promise.all([...sel].map((id) => patchProduct(id, { active })));
+    setSel(new Set()); setMsg(active ? "Products shown." : "Products hidden.");
+  }
+  async function batchAdjust(delta: number) {
+    if (sel.size === 0) return;
+    await Promise.all([...sel].map((id) => patchProduct(id, { inventoryDelta: delta })));
+    setSel(new Set()); setMsg(`Stock ${delta > 0 ? "+" : ""}${delta} applied.`);
+  }
+  async function batchDelete() {
+    if (sel.size === 0) return;
+    if (!confirm(`Delete ${sel.size} products? This cannot be undone.`)) return;
+    await Promise.all([...sel].map((id) => fetch(`/api/products/${id}`, { method: "DELETE", headers: { "x-admin-key": key } })));
+    setSel(new Set()); setMsg("Deleted.");
+  }
+
+  // ---------- CSV export ----------
+  function exportCSV() {
+    const rows = [
+      ["ID", "SKU", "Name (EN)", "Name (ZH)", "Price (USD)", "Sale Price (USD)", "Stock", "Category", "Tags", "Status", "Featured", "URL"],
+      ...shownProducts.map((p) => [
+        p.id, p.sku ?? "", p.name.en, p.name.zh, p.priceUSD, p.salePriceUSD ?? "", p.inventory,
+        p.category, (p.tags ?? []).join(" | "), p.active ? "Active" : "Hidden", p.featured ? "Yes" : "No",
+        "https://hanwoointernationalinc.net/products/" + p.slug,
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function timeAgo(iso?: string): string {
+    if (!iso) return "—";
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60_000) return "just now";
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    return new Date(iso).toLocaleDateString();
+  }
 
   function StockBadge({ p }: { p: Product }) {
     if (!p.active) return <span className="rounded bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">{t("admin.hidden")}</span>;
@@ -374,6 +478,8 @@ export default function AdminPage() {
             <input className="input" placeholder={t("admin.nameZh")} value={editing.nameZh} onChange={(e) => setEditing({ ...editing, nameZh: e.target.value })} />
             <input className="input" placeholder={t("admin.price")} value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
             <input className="input" placeholder={t("admin.salePrice")} value={editing.salePrice} onChange={(e) => setEditing({ ...editing, salePrice: e.target.value })} />
+            <input className="input" placeholder={t("admin.sku")} value={editing.sku} onChange={(e) => setEditing({ ...editing, sku: e.target.value })} />
+            <input className="input" placeholder={t("admin.tags")} value={editing.tags} onChange={(e) => setEditing({ ...editing, tags: e.target.value })} />
             <input className="input" placeholder={t("admin.category")} value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
             <input className="input" placeholder={t("admin.inventory")} value={editing.inventory} onChange={(e) => setEditing({ ...editing, inventory: e.target.value })} />
             <input className="input col-span-2" placeholder={t("admin.images")} value={editing.images} onChange={(e) => setEditing({ ...editing, images: e.target.value })} />
@@ -407,72 +513,161 @@ export default function AdminPage() {
 
       {tab === "products" && (
         <div className="mt-4">
-          <input
-            className="input mb-3 w-full md:max-w-sm"
-            placeholder={t("admin.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="space-y-2">
-            {shownProducts.length === 0 && <p className="text-sm text-gray-400">No products.</p>}
-            {shownProducts.map((p) => {
-              const onSale = p.salePriceUSD != null && p.salePriceUSD < p.priceUSD;
-              return (
-                <div key={p.id} className="card flex flex-wrap items-center justify-between gap-3 p-3">
-                  <div className="flex items-center gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
-                    <div>
-                      <div className="font-medium text-gray-900">{p.name.en} <span className="text-xs text-gray-400">/ {p.name.zh}</span></div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                        <span className="font-mono">{p.id}</span> · {p.category}
-                        {onSale ? (
-                          <span>
-                            <span className="text-green-700 font-semibold">${Number(p.salePriceUSD).toFixed(2)}</span>{" "}
-                            <span className="line-through">${Number(p.priceUSD).toFixed(2)}</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-600">${Number(p.priceUSD).toFixed(2)}</span>
-                        )}
-                        {p.featured && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-purple-700">NEW</span>}
-                      </div>
-                      <div className="mt-1">
-                        <StockBadge p={p} />
-                      </div>
-                    </div>
-                  </div>
+          {/* Toolbar: search + filters + export */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="input w-full md:w-72"
+              placeholder={t("admin.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select className="input w-auto" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+              <option value="all">{t("admin.allCategories") ?? "All categories"}</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button className="btn-secondary px-3 py-2 text-sm" onClick={exportCSV}>
+              ⬇ {t("admin.exportCSV") ?? "Export CSV"}
+            </button>
+            <span className="ml-auto text-sm text-gray-400">{shownProducts.length} / {products.length}</span>
+          </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Quick inventory adjust */}
-                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1">
-                      <span className="mr-1 text-xs text-gray-400">{t("admin.adjust") ?? "Adjust"}</span>
-                      {[-10, -1, 1, 10].map((d) => (
-                        <button
-                          key={d}
-                          onClick={() => quickAdjust(p.id, d)}
-                          className={`h-7 w-7 rounded text-sm font-bold ${d < 0 ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}
-                          title={`${d > 0 ? "+" : ""}${d}`}
-                        >
-                          {d > 0 ? `+${d}` : d}
-                        </button>
-                      ))}
-                    </div>
+          {/* Status filter tabs */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {([
+              ["all", t("admin.statusAll") ?? "All", "text-gray-700"],
+              ["active", t("admin.statusActive") ?? "Active", "text-green-700"],
+              ["low", t("admin.statusLow") ?? "Low stock", "text-amber-700"],
+              ["out", t("admin.statusOut") ?? "Out of stock", "text-red-600"],
+              ["hidden", t("admin.statusHidden") ?? "Hidden", "text-gray-500"],
+            ] as const).map(([k, label, cls]) => (
+              <button
+                key={k}
+                onClick={() => setStatusFilter(k)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${statusFilter === k ? "bg-gray-900 text-white" : `bg-white border border-gray-200 ${cls} hover:bg-gray-50`}`}
+              >
+                {label} <span className="opacity-60">{statusCounts[k]}</span>
+              </button>
+            ))}
+          </div>
 
-                    {/* Show/Hide toggle */}
-                    <button
-                      onClick={() => toggleActive(p)}
-                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${p.active ? "border-gray-200 text-gray-500 hover:border-red-200 hover:text-red-600" : "border-green-200 text-green-700 hover:bg-green-50"}`}
-                    >
-                      {p.active ? (t("admin.hidden") ?? "Hide") : (t("admin.active") ?? "Show")}
-                    </button>
+          {/* Batch action bar */}
+          {sel.size > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-accent/40 bg-brand-accent/5 px-3 py-2">
+              <span className="text-sm font-medium text-gray-900">{sel.size} selected</span>
+              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => batchActive(true)}>{t("admin.batchShow") ?? "Show"}</button>
+              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => batchActive(false)}>{t("admin.batchHide") ?? "Hide"}</button>
+              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => batchAdjust(10)}>{t("admin.batchAddStock") ?? "+10 stock"}</button>
+              <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => batchAdjust(-10)}>{t("admin.batchSubStock") ?? "-10 stock"}</button>
+              <button className="px-2.5 py-1 text-xs font-medium text-red-600 hover:underline" onClick={() => batchDelete()}>
+                {t("admin.batchDelete") ?? "Delete"}
+              </button>
+              <button className="ml-auto text-xs text-gray-400 hover:underline" onClick={() => setSel(new Set())}>
+                {t("admin.clearSelection") ?? "Clear"}
+              </button>
+            </div>
+          )}
 
-                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => startEdit(p, true)}>{t("admin.duplicate")}</button>
-                    <button className="btn-secondary px-2.5 py-1.5 text-xs" onClick={() => startEdit(p)}>{t("admin.edit")}</button>
-                    <button className="text-sm text-red-500 hover:underline" onClick={() => remove(p.id)}>{t("admin.delete")}</button>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Table */}
+          <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-400">
+                <tr>
+                  <th className="w-8 px-3 py-2.5">
+                    <input type="checkbox" checked={allShownSelected} onChange={toggleSelectAll} />
+                  </th>
+                  <th className="cursor-pointer select-none px-3 py-2.5" onClick={() => toggleSort("name")}>
+                    {t("admin.colProduct") ?? "Product"} <SortIcon k="name" />
+                  </th>
+                  <th className="px-3 py-2.5">{t("admin.colStatus") ?? "Status"}</th>
+                  <th className="cursor-pointer select-none px-3 py-2.5" onClick={() => toggleSort("price")}>
+                    {t("admin.colPrice") ?? "Price"} <SortIcon k="price" />
+                  </th>
+                  <th className="cursor-pointer select-none px-3 py-2.5" onClick={() => toggleSort("inventory")}>
+                    {t("admin.colStock") ?? "Stock"} <SortIcon k="inventory" />
+                  </th>
+                  <th className="px-3 py-2.5">{t("admin.category")}</th>
+                  <th className="cursor-pointer select-none px-3 py-2.5" onClick={() => toggleSort("updatedAt")}>
+                    {t("admin.colUpdated") ?? "Updated"} <SortIcon k="updatedAt" />
+                  </th>
+                  <th className="px-3 py-2.5 text-right">{t("admin.colActions") ?? "Actions"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {shownProducts.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No products.</td></tr>
+                )}
+                {shownProducts.map((p) => {
+                  const onSale = p.salePriceUSD != null && p.salePriceUSD < p.priceUSD;
+                  return (
+                    <tr key={p.id} className={sel.has(p.id) ? "bg-brand-accent/5" : "hover:bg-gray-50"}>
+                      <td className="px-3 py-2.5">
+                        <input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.images[0]} alt="" className="h-11 w-11 rounded object-cover" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900">{p.name.en}</div>
+                            <div className="truncate text-xs text-gray-400">
+                              {p.sku ? <span className="font-mono">{p.sku}</span> : null}
+                              {p.sku ? " · " : ""}{p.name.zh}
+                            </div>
+                            {(p.tags ?? []).length > 0 && (
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {p.tags!.slice(0, 3).map((tg) => (
+                                  <span key={tg} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">#{tg}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-col items-start gap-1">
+                          <StockBadge p={p} />
+                          <button
+                            onClick={() => toggleActive(p)}
+                            className="text-[11px] text-gray-400 hover:text-gray-700 hover:underline"
+                          >
+                            {p.active ? (t("admin.hide") ?? "Hide") : (t("admin.show") ?? "Show")}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="font-semibold text-gray-900">${effPrice(p).toFixed(2)}</span>
+                        {onSale && <span className="ml-1 text-xs text-gray-400 line-through">${p.priceUSD.toFixed(2)}</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <span className="w-8 text-right font-medium text-gray-700">{p.inventory}</span>
+                          <div className="flex gap-0.5">
+                            {[-1, 1].map((d) => (
+                              <button
+                                key={d}
+                                onClick={() => quickAdjust(p.id, d)}
+                                className={`h-6 w-6 rounded text-xs font-bold ${d < 0 ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}
+                                title={`${d > 0 ? "+" : ""}${d}`}
+                              >{d > 0 ? "+" : ""}{d}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">{p.category}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-400" title={p.updatedAt}>{timeAgo(p.updatedAt)}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-2 text-xs">
+                          <a className="text-gray-500 hover:text-brand-accent" title="View" target="_blank" rel="noreferrer" href={`/products/${p.slug}`}>👁</a>
+                          <button className="text-gray-500 hover:text-gray-900" title={t("admin.duplicate")} onClick={() => startEdit(p, true)}>⧉</button>
+                          <button className="text-gray-500 hover:text-gray-900" title={t("admin.edit")} onClick={() => startEdit(p)}>✏️</button>
+                          <button className="text-red-500 hover:text-red-700" title={t("admin.delete")} onClick={() => remove(p.id)}>🗑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

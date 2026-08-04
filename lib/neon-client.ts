@@ -68,6 +68,9 @@ function ensureSchema(): Promise<void> {
       )`);
       // Idempotent: add columns if an older table already exists
       await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price_usd NUMERIC(10,2)`);
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sku TEXT`);
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb`);
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TEXT`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'stripe'`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS zelle_confirmed BOOLEAN DEFAULT FALSE`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`);

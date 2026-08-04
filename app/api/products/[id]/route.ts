@@ -42,6 +42,8 @@ export async function PATCH(
   }
   if (typeof body.category === "string") next.category = body.category;
   if (typeof body.slug === "string" && body.slug.trim()) next.slug = body.slug.trim();
+  if (body.sku !== undefined) next.sku = typeof body.sku === "string" && body.sku.trim() ? body.sku.trim() : undefined;
+  if (Array.isArray(body.tags)) next.tags = body.tags.map((s: unknown) => String(s).trim()).filter(Boolean);
   if (body.name && (typeof body.name.en === "string" || typeof body.name.zh === "string")) {
     if (typeof body.name.en === "string") next.name.en = body.name.en;
     if (typeof body.name.zh === "string") next.name.zh = body.name.zh;

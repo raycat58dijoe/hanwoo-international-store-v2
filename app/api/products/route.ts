@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     description: body.description ?? { en: "", zh: "" },
     priceUSD: Number(body.priceUSD),
     salePriceUSD: body.salePriceUSD != null && Number(body.salePriceUSD) > 0 ? Number(body.salePriceUSD) : undefined,
+    sku: typeof body.sku === "string" && body.sku.trim() ? body.sku.trim() : undefined,
+    tags: Array.isArray(body.tags) ? body.tags.map((s) => String(s).trim()).filter(Boolean) : undefined,
     images: (body.images ?? []).filter(Boolean),
     category: body.category ?? "General",
     inventory: Number(body.inventory ?? 0),

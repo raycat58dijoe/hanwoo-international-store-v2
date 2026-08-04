@@ -9,6 +9,12 @@ export interface Product {
   priceUSD: number;
   /** Optional sale price in USD. When set, it is displayed (and charged) instead of priceUSD, which is shown struck-through. */
   salePriceUSD?: number;
+  /** Optional merchant SKU / item number. */
+  sku?: string;
+  /** Optional tags used for filtering/merchandising. */
+  tags?: string[];
+  /** ISO timestamp of the last update (auto-managed). */
+  updatedAt?: string;
   images: string[];
   category: string;
   inventory: number;
