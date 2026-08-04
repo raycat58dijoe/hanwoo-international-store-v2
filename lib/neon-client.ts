@@ -1,0 +1,72 @@
+/**
+ * Neon HTTP client — pure fetch, zero npm dependencies.
+ * Only imported at runtime via dynamic import() from db.ts.
+ *
+ * This separation ensures Next.js's build-time bundler never sees
+ * this code, avoiding module_not_found issues.
+ */
+
+const CONN_STR = process.env.POSTGRES_URL;
+
+function parseConnStr(s: string) {
+  const url = new URL(s);
+  return { host: url.hostname, user: url.username, pass: url.password };
+}
+
+let _ready: Promise<void> | null = null;
+
+function ensureSchema(): Promise<void> {
+  if (!_ready) {
+    _ready = (async () => {
+      await query(`CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+        name_en TEXT NOT NULL, name_zh TEXT NOT NULL,
+        description_en TEXT DEFAULT '', description_zh TEXT DEFAULT '',
+        price_usd NUMERIC(10,2) NOT NULL,
+        images JSONB DEFAULT '[]'::jsonb,
+        category TEXT DEFAULT 'General',
+        inventory INTEGER DEFAULT 0,
+        featured BOOLEAN DEFAULT FALSE,
+        active BOOLEAN DEFAULT TRUE
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        items JSONB DEFAULT '[]'::jsonb,
+        amount_usd NUMERIC(10,2) NOT NULL,
+        currency TEXT DEFAULT 'USD',
+        customer JSONB NOT NULL,
+        status TEXT DEFAULT 'pending',
+        stripe_session_id TEXT,
+        created_at TEXT NOT NULL
+      )`);
+      // Dynamic import of seed to avoid circular deps / build analysis
+      const { SEED_PRODUCTS } = await import("./seed");
+      const rows = await query<{ count: number }>("SELECT COUNT(*)::int AS count FROM products");
+      if (rows[0]?.count === 0) {
+        for (const p of SEED_PRODUCTS) {
+          await query(
+            `INSERT INTO products (id,slug,name_en,name_zh,description_en,description_zh,price_usd,images,category,inventory,featured,active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+            [p.id, p.slug, p.name.en, p.name.zh, p.description.en, p.description.zh, p.priceUSD, JSON.stringify(p.images), p.category, p.inventory, p.featured, p.active]
+          );
+        }
+        console.log("[neon] Seeded " + SEED_PRODUCTS.length + " products");
+      }
+    })().catch((e: unknown) => { _ready = null; throw e; });
+  }
+  return _ready;
+}
+
+export async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  if (!CONN_STR) throw new Error("POSTGRES_URL not set");
+  await ensureSchema();
+  const c = parseConnStr(CONN_STR);
+  const auth = Buffer.from(c.user + ":" + c.pass).toString("base64");
+  const res = await fetch("https://" + c.host + "/sql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Basic " + auth },
+    body: JSON.stringify({ query: sql, params: params ?? [] }),
+  });
+  if (!res.ok) { const text = await res.text(); throw new Error("Neon HTTP " + res.status + ": " + text); }
+  const data = await res.json();
+  return data.rows ?? data ?? [];
+}
