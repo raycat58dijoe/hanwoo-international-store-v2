@@ -2,14 +2,15 @@ import { SEED_PRODUCTS } from "./seed";
 import type { Order, Product } from "./types";
 
 /**
- * Real database layer (Postgres via Neon / any Postgres-compatible URL).
+ * Real database layer (Postgres via Neon serverless driver).
  *
  * - When POSTGRES_URL is set we read/write a real Postgres database.
  * - When it is NOT set (e.g. local preview without DB) we fall back to an
  *   in-memory copy of the seed data so the UI still works.
  *
- * The `postgres` driver is imported lazily so the app still boots in
- * memory-fallback mode even if the dependency isn't installed locally.
+ * Uses @neondatabase/serverless — a pure-JS driver built for Vercel /
+ * edge / serverless. No native dependencies, no build-time resolution
+ * issues.
  */
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
@@ -20,16 +21,12 @@ let _sql: any = null;
 async function db(): Promise<any> {
   if (!USE_DB) throw new Error("POSTGRES_URL is not configured");
   if (!_sql) {
-  // Fully dynamic import — the variable prevents static analysis by any bundler
-  // (webpack/turbopack/next), so "postgres" won't cause module_not_found at
-  // build time even when it isn't installed locally.
-  const _driver = "postgres";
-  const postgres = (await import(_driver)).default;
-    _sql = postgres(CONNECTION_STRING as string, {
-      max: 5,
-      idle_timeout: 20,
-      connect_timeout: 10,
-    });
+    // Dynamic import via variable — prevents any bundler from resolving
+    // this at build time. @neondatabase/serverless is pure JS (no native
+    // deps), so it works on Vercel / edge out of the box.
+    const _driver = "@neondatabase/serverless";
+    const neon = (await import(_driver)).neon;
+    _sql = neon(CONNECTION_STRING as string);
   }
   return _sql;
 }
