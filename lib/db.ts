@@ -20,9 +20,11 @@ let _sql: any = null;
 async function db(): Promise<any> {
   if (!USE_DB) throw new Error("POSTGRES_URL is not configured");
   if (!_sql) {
-    // webpackIgnore keeps this a runtime import so the app still boots in
-    // memory-fallback mode (POSTGRES_URL unset) without the package installed.
-    const postgres = (await import(/* webpackIgnore: true */ "postgres")).default;
+  // Fully dynamic import — the variable prevents static analysis by any bundler
+  // (webpack/turbopack/next), so "postgres" won't cause module_not_found at
+  // build time even when it isn't installed locally.
+  const _driver = "postgres";
+  const postgres = (await import(_driver)).default;
     _sql = postgres(CONNECTION_STRING as string, {
       max: 5,
       idle_timeout: 20,
