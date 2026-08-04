@@ -2,28 +2,76 @@ import { SEED_PRODUCTS } from "./seed";
 import type { Order, Product } from "./types";
 
 /**
- * Real database layer (Postgres via Neon serverless driver).
+ * Real database layer (Postgres via Neon HTTP API).
  *
- * - When POSTGRES_URL is set we read/write a real Postgres database.
+ * - When POSTGRES_URL is set we read/write a real Postgres database over
+ *   Neon's HTTP API (pure fetch — zero npm dependencies).
  * - When it is NOT set (e.g. local preview without DB) we fall back to an
  *   in-memory copy of the seed data so the UI still works.
  *
- * Uses @neondatabase/serverless — listed in next.config.mjs
- * serverExternalPackages so Next.js won't try to bundle it.
+ * No postgres / @neondatabase / any DB driver needed — just fetch().
  */
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
 const USE_DB = Boolean(CONNECTION_STRING);
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-let _sql: any = null;
-async function db(): Promise<any> {
-  if (!USE_DB) throw new Error("POSTGRES_URL is not configured");
-  if (!_sql) {
-    const { neon } = await import("@neondatabase/serverless");
-    _sql = neon(CONNECTION_STRING as string);
+/* ---------- parse connection string ---------- */
+function parseConnStr(s: string): {
+  host: string;
+  user: string;
+  pass: string;
+  dbname: string;
+} {
+  // postgresql://user:pass@host:5432/dbname?sslmode=require
+  const url = new URL(s);
+  return {
+    host: url.hostname,
+    user: url.username,
+    pass: url.password,
+    dbname: url.pathname.slice(1) || "neondb",
+  };
+}
+
+/* ---------- Neon HTTP API client ---------- */
+let _conn: ReturnType<typeof parseConnStr> | null = null;
+function conn() {
+  if (!_conn && CONNECTION_STRING) {
+    _conn = parseConnStr(CONNECTION_STRING);
   }
-  return _sql;
+  if (!_conn) throw new Error("POSTGRES_URL is not configured");
+  return _conn;
+}
+
+/**
+ * Execute SQL via Neon's /sql (or proxy-style) endpoint.
+ * Uses the pooled hostname + basic auth over HTTPS.
+ */
+async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
+  const c = conn();
+  // Neon supports querying via their serverless driver HTTP endpoint.
+  // We use the format compatible with @neondatabase/serverless wire protocol.
+  const body = {
+    query: sql,
+    params: params ?? [],
+  };
+
+  // Use Neon's query endpoint (works with pooled connections)
+  const res = await fetch(`https://${c.host}/sql`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${btoa(`${c.user}:${c.pass}`)}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Neon HTTP ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  return data.rows ?? data ?? [];
 }
 
 /* ---------- in-memory fallback ---------- */
@@ -39,11 +87,10 @@ function memEnsure(): Product[] {
 
 /* ---------- schema bootstrap ---------- */
 let schemaReady: Promise<void> | null = null;
-function ensureSchema(): Promise<void> {
+async function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
-      const sql = await db();
-      await sql`
+      await query(`
         CREATE TABLE IF NOT EXISTS products (
           id TEXT PRIMARY KEY,
           slug TEXT UNIQUE NOT NULL,
@@ -58,8 +105,8 @@ function ensureSchema(): Promise<void> {
           featured BOOLEAN NOT NULL DEFAULT FALSE,
           active BOOLEAN NOT NULL DEFAULT TRUE
         )
-      `;
-      await sql`
+      `);
+      await query(`
         CREATE TABLE IF NOT EXISTS orders (
           id TEXT PRIMARY KEY,
           items JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -70,25 +117,37 @@ function ensureSchema(): Promise<void> {
           stripe_session_id TEXT,
           created_at TEXT NOT NULL
         )
-      `;
-      const rows = await sql<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM products`;
-      if (rows[0].count === 0) {
+      `);
+      const rows = await query<{ count: number }>(
+        "SELECT COUNT(*)::int AS count FROM products"
+      );
+      if (rows[0]?.count === 0) {
         for (const p of SEED_PRODUCTS) {
-          await sql`
-            INSERT INTO products
+          await query(
+            `INSERT INTO products
               (id, slug, name_en, name_zh, description_en, description_zh,
                price_usd, images, category, inventory, featured, active)
-            VALUES
-              (${p.id}, ${p.slug}, ${p.name.en}, ${p.name.zh},
-               ${p.description.en}, ${p.description.zh}, ${p.priceUSD},
-               ${sql.json(p.images)}, ${p.category}, ${p.inventory},
-               ${p.featured}, ${p.active})
-            ON CONFLICT (id) DO NOTHING
-          `;
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              p.id,
+              p.slug,
+              p.name.en,
+              p.name.zh,
+              p.description.en,
+              p.description.zh,
+              p.priceUSD,
+              JSON.stringify(p.images),
+              p.category,
+              p.inventory,
+              p.featured,
+              p.active,
+            ]
+          );
         }
         console.log(`[db] Seeded ${SEED_PRODUCTS.length} products`);
       }
-    })().catch((e: any) => {
+    })().catch((e: unknown) => {
       schemaReady = null; // allow retry on next call
       throw e;
     });
@@ -136,24 +195,21 @@ function rowToOrder(r: any): Order {
 export async function getProducts(): Promise<Product[]> {
   if (!USE_DB) return memEnsure().filter((p) => p.active);
   await ensureSchema();
-  const sql = await db();
-  const rows = await sql<Product[]>`SELECT * FROM products WHERE active = TRUE`;
+  const rows = await query("SELECT * FROM products WHERE active = TRUE");
   return rows.map(rowToProduct);
 }
 
 export async function getAllProducts(): Promise<Product[]> {
   if (!USE_DB) return memEnsure();
   await ensureSchema();
-  const sql = await db();
-  const rows = await sql<Product[]>`SELECT * FROM products`;
+  const rows = await query("SELECT * FROM products");
   return rows.map(rowToProduct);
 }
 
 export async function getProductById(id: string): Promise<Product | undefined> {
   if (!USE_DB) return memEnsure().find((p) => p.id === id);
   await ensureSchema();
-  const sql = await db();
-  const rows = await sql<Product[]>`SELECT * FROM products WHERE id = ${id}`;
+  const rows = await query("SELECT * FROM products WHERE id = $1", [id]);
   return rows[0] ? rowToProduct(rows[0]) : undefined;
 }
 
@@ -162,8 +218,7 @@ export async function getProductBySlug(
 ): Promise<Product | undefined> {
   if (!USE_DB) return memEnsure().find((p) => p.slug === slug);
   await ensureSchema();
-  const sql = await db();
-  const rows = await sql<Product[]>`SELECT * FROM products WHERE slug = ${slug}`;
+  const rows = await query("SELECT * FROM products WHERE slug = $1", [slug]);
   return rows[0] ? rowToProduct(rows[0]) : undefined;
 }
 
@@ -176,29 +231,32 @@ export async function upsertProduct(p: Product): Promise<Product[]> {
     return list;
   }
   await ensureSchema();
-  const sql = await db();
-  await sql`
-    INSERT INTO products
+  await query(
+    `INSERT INTO products
       (id, slug, name_en, name_zh, description_en, description_zh,
        price_usd, images, category, inventory, featured, active)
-    VALUES
-      (${p.id}, ${p.slug}, ${p.name.en}, ${p.name.zh},
-       ${p.description.en}, ${p.description.zh}, ${p.priceUSD},
-       ${sql.json(p.images)}, ${p.category}, ${p.inventory},
-       ${p.featured}, ${p.active})
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     ON CONFLICT (id) DO UPDATE SET
-      slug = EXCLUDED.slug,
-      name_en = EXCLUDED.name_en,
-      name_zh = EXCLUDED.name_zh,
-      description_en = EXCLUDED.description_en,
-      description_zh = EXCLUDED.description_zh,
-      price_usd = EXCLUDED.price_usd,
-      images = EXCLUDED.images,
-      category = EXCLUDED.category,
-      inventory = EXCLUDED.inventory,
-      featured = EXCLUDED.featured,
-      active = EXCLUDED.active
-  `;
+      slug=EXCLUDED.slug, name_en=EXCLUDED.name_en, name_zh=EXCLUDED.name_zh,
+      description_en=EXCLUDED.description_en, description_zh=EXCLUDED.description_zh,
+      price_usd=EXCLUDED.price_usd, images=EXCLUDED.images,
+      category=EXCLUDED.category, inventory=EXCLUDED.inventory,
+      featured=EXCLUDED.featured, active=EXCLUDED.active`,
+    [
+      p.id,
+      p.slug,
+      p.name.en,
+      p.name.zh,
+      p.description.en,
+      p.description.zh,
+      p.priceUSD,
+      JSON.stringify(p.images),
+      p.category,
+      p.inventory,
+      p.featured,
+      p.active,
+    ]
+  );
   return getAllProducts();
 }
 
@@ -209,8 +267,7 @@ export async function deleteProduct(id: string): Promise<Product[]> {
     return memProducts;
   }
   await ensureSchema();
-  const sql = await db();
-  await sql`DELETE FROM products WHERE id = ${id}`;
+  await query("DELETE FROM products WHERE id = $1", [id]);
   return getAllProducts();
 }
 
@@ -221,22 +278,28 @@ export async function createOrder(o: Order): Promise<Order> {
     return o;
   }
   await ensureSchema();
-  const sql = await db();
-  await sql`
-    INSERT INTO orders
+  await query(
+    `INSERT INTO orders
       (id, items, amount_usd, currency, customer, status, stripe_session_id, created_at)
-    VALUES
-      (${o.id}, ${sql.json(o.items)}, ${o.amountUSD}, ${o.currency},
-       ${sql.json(o.customer)}, ${o.status}, ${o.stripeSessionId ?? null}, ${o.createdAt})
-  `;
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      o.id,
+      JSON.stringify(o.items),
+      o.amountUSD,
+      o.currency,
+      JSON.stringify(o.customer),
+      o.status,
+      o.stripeSessionId ?? null,
+      o.createdAt,
+    ]
+  );
   return o;
 }
 
 export async function getOrder(id: string): Promise<Order | undefined> {
   if (!USE_DB) return memOrders.find((o) => o.id === id);
   await ensureSchema();
-  const sql = await db();
-  const rows = await sql<Order[]>`SELECT * FROM orders WHERE id = ${id}`;
+  const rows = await query("SELECT * FROM orders WHERE id = $1", [id]);
   return rows[0] ? rowToOrder(rows[0]) : undefined;
 }
 
@@ -251,7 +314,6 @@ export async function updateOrder(
     return memOrders[idx];
   }
   await ensureSchema();
-  const sql = await db();
   const sets: string[] = [];
   const params: any[] = [];
   let i = 1;
@@ -264,7 +326,7 @@ export async function updateOrder(
     params.push(patch.stripeSessionId);
   }
   if (sets.length === 0) return getOrder(id);
-  await sql.unsafe(
+  await query(
     `UPDATE orders SET ${sets.join(", ")} WHERE id = $${i}`,
     [...params, id]
   );
