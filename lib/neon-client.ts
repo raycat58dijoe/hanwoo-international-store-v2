@@ -60,6 +60,10 @@ function ensureSchema(): Promise<void> {
       // Idempotent: add columns if an older table already exists
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'stripe'`);
       await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS zelle_confirmed BOOLEAN DEFAULT FALSE`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TEXT`);
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS note TEXT`);
 
       // Dynamic import of seed to avoid circular deps
       const { SEED_PRODUCTS } = await import("./seed");

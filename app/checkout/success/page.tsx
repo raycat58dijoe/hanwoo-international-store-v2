@@ -11,7 +11,7 @@ function SuccessInner() {
   const params = useSearchParams();
   const { t, locale } = useI18n();
   const [order, setOrder] = useState<Order | null>(null);
-  const [state, setState] = useState<"loading" | "paid" | "pending" | "error">("loading");
+  const [state, setState] = useState<"loading" | "paid" | "pending" | "shipped" | "delivered" | "error">("loading");
   const method = params.get("method");
 
   useEffect(() => {
@@ -33,7 +33,7 @@ function SuccessInner() {
       .then((d) => {
         if (d.order) {
           setOrder(d.order);
-          setState(d.order.status === "paid" ? "paid" : "pending");
+          setState(d.order.status as typeof state);
         } else {
           setState("error");
         }
@@ -76,6 +76,26 @@ function SuccessInner() {
           </div>
         )}
 
+        {(state === "shipped" || state === "delivered") && (
+          <div className="mt-4 rounded-lg bg-blue-50 px-4 py-3 text-left text-sm text-blue-800">
+            <div className="font-semibold">
+              {state === "delivered" ? (t("success.delivered") ?? "Delivered") : (t("success.shipped") ?? "Shipped")}
+            </div>
+            {order.trackingNumber && (
+              <div className="mt-1">
+                {t("success.tracking") ?? "Tracking"}:{" "}
+                {order.trackingUrl ? (
+                  <a className="font-mono underline" href={order.trackingUrl} target="_blank" rel="noreferrer">
+                    {order.trackingNumber}
+                  </a>
+                ) : (
+                  <span className="font-mono">{order.trackingNumber}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-6 space-y-2 text-left">
           {order.items.map((it) => (
             <div key={it.productId} className="flex justify-between text-sm">
@@ -91,9 +111,14 @@ function SuccessInner() {
           </div>
         </div>
 
-        <Link href="/" className="btn-secondary mt-8">
-          {t("success.backHome")}
-        </Link>
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Link href={`/track?id=${order.id}`} className="btn-secondary">
+            {t("success.trackOrder") ?? "Track this order"}
+          </Link>
+          <Link href="/" className="text-sm text-brand-accent hover:underline">
+            {t("success.backHome")}
+          </Link>
+        </div>
       </div>
     </div>
   );

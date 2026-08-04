@@ -37,7 +37,22 @@ function rowToProduct(r: any): Product {
   return { id: r.id, slug: r.slug, name: { en: r.name_en, zh: r.name_zh }, description: { en: r.description_en, zh: r.description_zh }, priceUSD: Number(r.price_usd), images, category: r.category, inventory: Number(r.inventory), featured: r.featured, active: r.active };
 }
 function rowToOrder(r: any): Order {
-  return { id: r.id, items: typeof r.items === "string" ? JSON.parse(r.items) : r.items || [], amountUSD: Number(r.amount_usd), currency: r.currency, customer: typeof r.customer === "string" ? JSON.parse(r.customer) : r.customer, status: r.status, paymentMethod: (r.payment_method as Order["paymentMethod"]) || "stripe", zelleConfirmed: Boolean(r.zelle_confirmed), stripeSessionId: r.stripe_session_id ?? undefined, createdAt: r.created_at };
+  return {
+    id: r.id,
+    items: typeof r.items === "string" ? JSON.parse(r.items) : r.items || [],
+    amountUSD: Number(r.amount_usd),
+    currency: r.currency,
+    customer: typeof r.customer === "string" ? JSON.parse(r.customer) : r.customer,
+    status: r.status,
+    paymentMethod: (r.payment_method as Order["paymentMethod"]) || "stripe",
+    zelleConfirmed: Boolean(r.zelle_confirmed),
+    stripeSessionId: r.stripe_session_id ?? undefined,
+    createdAt: r.created_at,
+    trackingNumber: r.tracking_number ?? undefined,
+    trackingUrl: r.tracking_url ?? undefined,
+    shippedAt: r.shipped_at ?? undefined,
+    note: r.note ?? undefined,
+  };
 }
 
 /* ---------- products ---------- */
@@ -102,16 +117,46 @@ export async function getOrder(id: string): Promise<Order | undefined> {
 }
 export async function updateOrder(id: string, patch: Partial<Order>): Promise<Order | undefined> {
   const neon = await getNeon();
-  if (!neon) { const i = memOrders.findIndex((o) => o.id === id); if (i < 0) return undefined; memOrders[i] = { ...memOrders[i], ...patch }; return memOrders[i]; }
+  if (!neon) {
+    const i = memOrders.findIndex((o) => o.id === id);
+    if (i < 0) return undefined;
+    memOrders[i] = { ...memOrders[i], ...patch };
+    return memOrders[i];
+  }
   try {
     const sets: string[] = []; const vals: any[] = []; let n = 1;
     if (patch.status !== undefined) { sets.push("status=$" + n++); vals.push(patch.status); }
     if (patch.stripeSessionId !== undefined) { sets.push("stripe_session_id=$" + n++); vals.push(patch.stripeSessionId); }
     if (patch.zelleConfirmed !== undefined) { sets.push("zelle_confirmed=$" + n++); vals.push(patch.zelleConfirmed); }
+    if (patch.trackingNumber !== undefined) { sets.push("tracking_number=$" + n++); vals.push(patch.trackingNumber); }
+    if (patch.trackingUrl !== undefined) { sets.push("tracking_url=$" + n++); vals.push(patch.trackingUrl); }
+    if (patch.shippedAt !== undefined) { sets.push("shipped_at=$" + n++); vals.push(patch.shippedAt); }
+    if (patch.note !== undefined) { sets.push("note=$" + n++); vals.push(patch.note); }
     if (sets.length === 0) return getOrder(id);
     await neon.queryWithSchema("UPDATE orders SET " + sets.join(",") + " WHERE id=$" + n, [...vals, id]);
     return getOrder(id);
   } catch { return updateOrder(id, patch); }
+}
+
+/**
+ * Mark an order paid AND atomically decrement product inventory.
+ * Idempotent: if the order is already `paid` (or later), inventory is NOT
+ * touched again, so retries / double webhooks can't double-decrement stock.
+ */
+export async function markOrderPaid(id: string, sessionId?: string): Promise<Order | undefined> {
+  const current = await getOrder(id);
+  if (!current) return undefined;
+  if (current.status === "paid" || current.status === "shipped" || current.status === "delivered") {
+    return current; // already paid — don't re-decrement
+  }
+  // Decrement stock for each line item (best-effort; skip missing products).
+  for (const it of current.items) {
+    const p = await getProductById(it.productId);
+    if (p) {
+      await upsertProduct({ ...p, inventory: Math.max(0, p.inventory - it.qty) });
+    }
+  }
+  return updateOrder(id, sessionId ? { status: "paid", stripeSessionId: sessionId } : { status: "paid" });
 }
 
 export function genId(prefix: string): string {

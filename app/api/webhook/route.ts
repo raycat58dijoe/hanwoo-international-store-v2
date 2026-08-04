@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
-import { getOrder, updateOrder } from "@/lib/db";
+import { getOrder, markOrderPaid } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     const session = event.data.object;
     const orderId = session.metadata?.orderId;
     if (orderId && (await getOrder(orderId))) {
-      await updateOrder(orderId, { status: "paid", stripeSessionId: session.id });
+      await markOrderPaid(orderId, session.id);
     }
   }
 
