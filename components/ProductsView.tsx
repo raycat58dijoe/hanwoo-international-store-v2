@@ -19,7 +19,7 @@ export function ProductsView({
   initialQuery?: string;
   initialSort?: SortKey;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [cat, setCat] = useState<string>(initialCategory || "all");
   const [query, setQuery] = useState<string>(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>((initialSort as SortKey) || "newest");
