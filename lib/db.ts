@@ -388,9 +388,12 @@ export async function __neonProbe(token: string) {
     catch (e: any) { return label + ":" + (e?.message ?? "").slice(0, 90); }
   };
   return {
-    selectSessions: await tryQuery("select", "SELECT COUNT(*) FROM sessions"),
-    insertSessions: await tryQuery("insert", "INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)", ["probe-" + token.slice(0, 12), "probe", new Date().toISOString(), new Date().toISOString()]),
-    insertReviews: await tryQuery("rev", "INSERT INTO reviews (id,product_id,order_id,customer_name,rating,comment,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", ["probe-rev-" + token.slice(0, 8), "p_probe", "ord_probe", "", 5, "", new Date().toISOString()]),
+    selectUsers: await tryQuery("users", "SELECT COUNT(*) FROM users"),
+    selectProducts: await tryQuery("products", "SELECT COUNT(*) FROM products"),
+    selectSessions: await tryQuery("sessions", "SELECT COUNT(*) FROM sessions"),
+    selectReviews: await tryQuery("reviews", "SELECT COUNT(*) FROM reviews"),
+    selectNonexistent: await tryQuery("nope", "SELECT COUNT(*) FROM table_does_not_exist_xyz"),
+    insertSessions: await tryQuery("insert-s", "INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)", ["probe-" + token.slice(0, 12), "probe", new Date().toISOString(), new Date().toISOString()]),
   };
 }
 
