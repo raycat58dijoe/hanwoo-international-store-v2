@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n, CURRENCIES } from "./I18nProvider";
@@ -13,6 +13,25 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [allProducts, setAllProducts] = useState<{ slug: string; name: string; image: string }[]>([]);
+  const [suggestions, setSuggestions] = useState<{ slug: string; name: string; image: string }[]>([]);
+  const searchRef = useRef<HTMLDivElement | null>(null);
+
+  // Load product catalog for autocomplete
+  useEffect(() => {
+    if (!searchOpen || allProducts.length > 0) return;
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.products ?? []).map((p: any) => ({
+          slug: p.slug,
+          name: typeof p.name === "object" ? (p.name.en ?? "") : (p.name ?? ""),
+          image: Array.isArray(p.images) ? p.images[0] : "",
+        }));
+        setAllProducts(list);
+      })
+      .catch(() => {});
+  }, [searchOpen, allProducts.length]);
 
   const submitSearch = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -78,20 +97,45 @@ export function Header() {
 
             {/* Search */}
             {searchOpen ? (
-              <form onSubmit={submitSearch} className="flex items-center gap-1">
-                <input
-                  autoFocus
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder={t("search.placeholder") ?? "Search products…"}
-                  className="w-36 sm:w-52 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs text-white outline-none placeholder:text-white/50"
-                />
-                <button type="submit" className="nav-icon-btn" title="Search">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-                  </svg>
-                </button>
-              </form>
+              <div className="relative" ref={searchRef}>
+                <form onSubmit={submitSearch} className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    value={q}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setQ(v);
+                      if (v.trim().length >= 2) {
+                        const term = v.toLowerCase();
+                        setSuggestions(allProducts.filter((p) => p.name.toLowerCase().includes(term)).slice(0, 6));
+                      } else { setSuggestions([]); }
+                    }}
+                    placeholder={t("search.placeholder") ?? "Search products…"}
+                    className="w-36 sm:w-52 rounded border border-white/20 bg-white/10 px-2 py-1 text-xs text-white outline-none placeholder:text-white/50"
+                  />
+                  <button type="submit" className="nav-icon-btn" title="Search">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                  </button>
+                </form>
+                {suggestions.length > 0 && (
+                  <ul className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-white/10 bg-[#1a1a1a] shadow-xl overflow-hidden">
+                    {suggestions.map((s) => (
+                      <li key={s.slug} className="border-b border-white/5 last:border-0">
+                        <button
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10"
+                          onClick={() => { setQ(""); setSuggestions([]); setSearchOpen(false); router.push(`/products/${s.slug}`); }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          {s.image && <img src={s.image} alt="" className="h-8 w-8 rounded object-cover" />}
+                          <span className="truncate">{s.name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : (
               <button className="nav-icon-btn hidden sm:inline-flex" title="Search" onClick={() => setSearchOpen(true)}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

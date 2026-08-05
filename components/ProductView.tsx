@@ -7,7 +7,7 @@ import { useI18n } from "./I18nProvider";
 import { useCart } from "./CartProvider";
 import { formatMoney } from "@/lib/currency";
 
-export function ProductView({ product }: { product: Product }) {
+export function ProductView({ product, related }: { product: Product; related?: Product[] }) {
   const { locale, currency, t } = useI18n();
   const { add } = useCart();
   const router = useRouter();
@@ -36,14 +36,37 @@ export function ProductView({ product }: { product: Product }) {
       <div className="grid gap-10 py-8 md:grid-cols-2">
         {/* Gallery */}
         <div>
-          <div className="product-card-image-wrap rounded-xl" style={{ aspectRatio: "1/1" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={product.images[active] ?? product.images[0]}
-              alt={name}
-              className="product-card-image"
-            />
-          </div>
+<div className="product-card-image-wrap rounded-xl relative" style={{ aspectRatio: "1/1" }}
+              onTouchStart={(e) => { const t = (e.target as HTMLElement); t.dataset.swipeX = String(e.touches[0].clientX); }}
+              onTouchEnd={(e) => {
+                const el = e.target as HTMLElement;
+                const startX = Number(el.dataset.swipeX ?? "0");
+                const diff = startX - e.changedTouches[0].clientX;
+                if (Math.abs(diff) > 50 && product.images.length > 1) {
+                  setActive((a) => (diff > 0 ? (a + 1) % product.images.length : (a - 1 + product.images.length) % product.images.length));
+                  el.dataset.swipeX = "";
+                }
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={product.images[active] ?? product.images[0]}
+                alt={name}
+                className="product-card-image"
+                draggable="false"
+              />
+              {product.images.length > 1 && (
+                <>
+                  <button onClick={() => setActive((a) => (a - 1 + product.images.length) % product.images.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 text-white text-lg hover:bg-black/50">‹</button>
+                  <button onClick={() => setActive((a) => (a + 1) % product.images.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 text-white text-lg hover:bg-black/50">›</button>
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {product.images.map((_, i) => (
+                      <span key={i} className={`w-2 h-2 rounded-full ${i === active ? "bg-white" : "bg-white/50"}`} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           {product.images.length > 1 && (
             <div className="mt-3 flex gap-2">
               {product.images.map((src, i) => (
@@ -192,6 +215,30 @@ export function ProductView({ product }: { product: Product }) {
           </div>
         )}
       </div>
+
+      {/* You may also like */}
+      {related && related.length > 0 && (
+        <section className="mt-16">
+          <h2 className="text-xl font-bold text-gray-900">You may also like</h2>
+          <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {related
+              .filter((r) => r.id !== product.id && r.active)
+              .sort(() => Math.random() - 0.5)
+              .slice(0, 4)
+              .map((r) => (
+                <a key={r.id} href={`/products/${r.slug}`} className="card group overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={r.images[0]} alt="" className="h-40 w-full object-cover group-hover:scale-105 transition-transform" />
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-gray-900 truncate">{r.name[locale]}</p>
+                    <p className="mt-1 text-sm font-bold text-gray-900">${(r.salePriceUSD ?? r.priceUSD).toFixed(2)}</p>
+                  </div>
+                </a>
+              ))}
+          </div>
+        </section>
+      )}
+
     </div>
   );
 }

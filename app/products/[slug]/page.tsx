@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProductBySlug } from "@/lib/db";
+import { getProductBySlug, getProducts } from "@/lib/db";
 import { ProductView } from "@/components/ProductView";
 import { headers } from "next/headers";
 
@@ -37,6 +37,7 @@ export default async function ProductDetailPage({
   const product = await getProductBySlug(params.slug);
   if (!product || !product.active) notFound();
 
+  const allProducts = await getProducts();
   const price = product.salePriceUSD ?? product.priceUSD;
 
   const jsonLd = {
@@ -59,7 +60,7 @@ export default async function ProductDetailPage({
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <ProductView product={product} />
+      <ProductView product={product} related={allProducts} />
     </>
   );
 }

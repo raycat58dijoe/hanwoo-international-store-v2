@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useI18n } from "@/components/I18nProvider";
 import { useCart } from "@/components/CartProvider";
 import { formatMoney } from "@/lib/currency";
+import { SHIPPING_THRESHOLD, SHIPPING_FLAT_USD } from "@/lib/shipping";
 import type { Product } from "@/lib/types";
 
 export default function CartPage() {
@@ -38,6 +39,29 @@ export default function CartPage() {
   return (
     <div className="container-page py-8">
       <h1 className="text-2xl font-bold text-gray-900">{t("cart.title")}</h1>
+
+      {/* Free-shipping progress bar */}
+      {totalUSD < SHIPPING_THRESHOLD ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-amber-800">
+              Add <strong>{formatMoney(SHIPPING_THRESHOLD - totalUSD, "USD")}</strong> to get <strong>free shipping</strong>
+            </span>
+            <span className="text-amber-600">{formatMoney(totalUSD, "USD")} / {formatMoney(SHIPPING_THRESHOLD, "USD")}</span>
+          </div>
+          <div className="mt-2 h-2 rounded-full bg-amber-200">
+            <div
+              className="h-full rounded-full bg-amber-500 transition-all duration-500"
+              style={{ width: Math.min(100, (totalUSD / SHIPPING_THRESHOLD) * 100) + "%" }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
+          <p className="text-sm font-medium text-green-800">🎉 You got <strong>free shipping</strong>!</p>
+        </div>
+      )}
+
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {items.map((it) => {
