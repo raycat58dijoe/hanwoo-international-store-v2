@@ -7,6 +7,7 @@ import { useCart } from "@/components/CartProvider";
 import { formatMoney } from "@/lib/currency";
 import { SHIPPING_THRESHOLD, SHIPPING_FLAT_USD } from "@/lib/shipping";
 import { regionsForCountry, CHECKOUT_COUNTRIES, isValidPostalCode } from "@/lib/regions";
+import { getCitiesByState } from "@/lib/us-cities";
 import type { PaymentMethod } from "@/lib/types";
 
 type AddressSuggestion = { display: string; address: string; city: string; state: string; zip: string };
@@ -178,17 +179,12 @@ export default function CheckoutPage() {
     if (a.zip) { lookupZip(a.zip); } // confirm city/state match
   }
 
-  // ---------- city suggestions by state ----------
-  async function loadCitiesForState(cc: string, st: string) {
-    if (cc !== "US" || !st) { setCityOptions([]); return; }
-    setCityLoading(true);
-    try {
-      const res = await fetch(`https://api.zippopotam.us/us/${encodeURIComponent(st)}`);
-      if (!res.ok) { setCityOptions([]); return; }
-      const d = await res.json();
-      setCityOptions((d.places ?? []).map((p: any) => p["place name"]).filter(Boolean));
-    } catch { setCityOptions([]); }
-    finally { setCityLoading(false); }
+  // ---------- city suggestions by state (local data) ----------
+  function loadCitiesForState(cc: string, st: string) {
+    if (cc !== "US" || !st) { setCityOptions([]); setCityLoading(false); return; }
+    const cities = getCitiesByState(st);
+    setCityOptions(cities);
+    setCityLoading(false);
   }
 
   const confirmZelleSent = async () => {
