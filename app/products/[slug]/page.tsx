@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProductBySlug } from "@/lib/db";
 import { ProductView } from "@/components/ProductView";
+import { headers } from "next/headers";
 
 const SITE_URL = "https://hanwoointernationalinc.net";
 
@@ -32,6 +33,7 @@ export default async function ProductDetailPage({
 }: {
   params: { slug: string };
 }) {
+  headers(); // force dynamic
   const product = await getProductBySlug(params.slug);
   if (!product || !product.active) notFound();
 
