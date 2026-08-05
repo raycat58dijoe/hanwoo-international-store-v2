@@ -82,19 +82,35 @@ export default function AdminPage() {
   }, []);
 
   async function load() {
-    const res = await fetch("/api/products");
-    const data = await res.json();
-    setProducts(data.products ?? []);
+    try {
+      const res = await fetch("/api/products");
+      const data = await res.json();
+      setProducts(data.products ?? data ?? []);
+    } catch (e) {
+      console.error("[admin] load products failed", e);
+    }
   }
 
   async function loadOrders() {
-    const res = await fetch("/api/orders", { headers: { "x-admin-key": key } });
-    const data = await res.json();
-    setOrders(data.orders ?? []);
+    try {
+      const res = await fetch("/api/orders", { headers: { "x-admin-key": key } });
+      const data = await res.json();
+      setOrders(data.orders ?? []);
+    } catch (e) {
+      console.error("[admin] load orders failed", e);
+    }
   }
 
   useEffect(() => {
-    if ((tab === "orders" || tab === "dashboard") && key) loadOrders();
+    if (saved) { load(); loadOrders(); }
+  }, []);
+
+  useEffect(() => {
+    if (!key) return;
+    if (tab === "orders" || tab === "dashboard") {
+      loadOrders();
+      load(); // refresh products so dashboard stats reflect current inventory
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, key]);
 
