@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProductById, createOrder, updateOrder, genId, getUserBySessionToken } from "@/lib/db";
+import { getProductById, createOrder, updateOrder, genId } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
 import { calcShippingUSD } from "@/lib/shipping";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { verifyToken, SESSION_COOKIE } from "@/lib/auth";
 import type { Order, OrderItem, Product, PaymentMethod } from "@/lib/types";
 
 // Merchant's enrolled Zelle identifier (email or US phone). Set via the
@@ -63,16 +63,15 @@ export async function POST(req: NextRequest) {
     const shippingUSD = calcShippingUSD(subtotalUSD);
     const amountUSD = subtotalUSD + shippingUSD;
 
-    // Attach the account when a session cookie is present.
-    const sessionToken = req.cookies.get(SESSION_COOKIE)?.value;
-    const signedInUser = sessionToken ? await getUserBySessionToken(sessionToken) : null;
+    // Attach the account when a session cookie is present (stateless JWT).
+    const signedInUser = verifyToken(req.cookies.get(SESSION_COOKIE)?.value);
 
     const order: Order = {
       id: genId("ord"),
       items: orderItems,
       amountUSD,
       currency,
-      userId: signedInUser?.id,
+      userId: signedInUser?.uid,
       customer,
       status: "pending",
       paymentMethod: method,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrdersByEmail, getUserBySessionToken } from "@/lib/db";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { getOrdersByEmail } from "@/lib/db";
+import { verifyToken, SESSION_COOKIE } from "@/lib/auth";
 
 // Customer-facing order lookup.
 // - Signed-in users are always resolved to their own account email (ignores
@@ -8,8 +8,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 // - Guests may look up by the email they used at checkout.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const sessionToken = req.cookies.get(SESSION_COOKIE)?.value;
-  const signedInUser = sessionToken ? await getUserBySessionToken(sessionToken) : null;
+  const signedInUser = verifyToken(req.cookies.get(SESSION_COOKIE)?.value);
 
   let email = "";
   if (signedInUser) {
