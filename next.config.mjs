@@ -20,6 +20,11 @@ const nextConfig = {
       ],
     },
   ],
+  // Kill Next.js client-side Router Cache (default 30s) — price/stock changes
+  // should appear immediately when navigating back from admin.
+  experimental: {
+    staleTimes: { dynamic: 0, static: 0 },
+  },
 };
 
 export default nextConfig;

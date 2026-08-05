@@ -57,6 +57,7 @@ function rowToOrder(r: any): Order {
 
 /* ---------- products ---------- */
 export async function getProducts(): Promise<Product[]> {
+  // Force fresh DB read each call — skip Next.js in-memory Data Cache.
   const neon = await getNeon();
   if (!neon) return memEnsure().filter((p) => p.active);
   try { return (await neon.queryWithSchema("SELECT * FROM products WHERE active = TRUE")).map(rowToProduct); }
