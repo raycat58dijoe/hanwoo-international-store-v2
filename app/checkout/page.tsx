@@ -23,7 +23,7 @@ export default function CheckoutPage() {
 
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: typeof window !== "undefined" ? (localStorage.getItem("acc_email") ?? "") : "",
     address: "",
     city: "",
     state: "",

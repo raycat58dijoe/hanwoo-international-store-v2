@@ -205,7 +205,14 @@ function ReturnModal({ order, onClose, onDone }: { order: Order; onClose: () => 
 function AccountInner() {
   const params = useSearchParams();
   const { t, locale } = useI18n();
-  const [email, setEmail] = useState(params.get("email") ?? "");
+  const [email, setEmail] = useState(() =>
+    typeof window !== "undefined"
+      ? (localStorage.getItem("acc_email") ?? params.get("email") ?? "")
+      : (params.get("email") ?? "")
+  );
+  const [loggedIn, setLoggedIn] = useState(
+    () => typeof window !== "undefined" && !!localStorage.getItem("acc_email")
+  );
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [searchedFor, setSearchedFor] = useState("");
   const [error, setError] = useState("");
@@ -240,7 +247,32 @@ function AccountInner() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { if (params.get("email")) lookup(params.get("email")!); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [params]);
+  // Guest login: email is the identity (no password). Remembered in localStorage.
+  function login(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError("Please enter a valid email address."); return; }
+    const em = email.trim().toLowerCase();
+    localStorage.setItem("acc_email", em);
+    setLoggedIn(true);
+    lookup(em);
+  }
+
+  function logout() {
+    localStorage.removeItem("acc_email");
+    setLoggedIn(false); setOrders(null); setEmail(""); setError("");
+  }
+
+  useEffect(() => {
+    const em = typeof window !== "undefined" ? localStorage.getItem("acc_email") : null;
+    if (em) lookup(em);
+    else if (params.get("email")) {
+      const p = params.get("email")!;
+      localStorage.setItem("acc_email", p);
+      setLoggedIn(true);
+      lookup(p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: orders?.length ?? 0, pending: 0, paid: 0, shipped: 0, toReview: 0, returns: 0 };
@@ -284,64 +316,98 @@ function AccountInner() {
   return (
     <div className="container-page max-w-3xl py-10">
       <h1 className="text-2xl font-bold text-gray-900">{t("account.title") ?? "My Account"}</h1>
-      <p className="mt-1 text-sm text-gray-500">{t("account.subtitle") ?? "Enter the email you used at checkout to manage your orders."}</p>
+      <p className="mt-1 text-sm text-gray-500">
+        {loggedIn
+          ? (t("account.loggedInSub") ?? "Welcome back! Here are your orders.")
+          : (t("account.subtitle") ?? "Sign in with your email to manage your orders — no password needed.")}
+      </p>
 
-      <form className="mt-5 flex gap-2" onSubmit={(e) => { e.preventDefault(); lookup(email); }}>
-        <input type="email" className="input flex-1" placeholder={t("account.emailPlaceholder") ?? "your@email.com"} value={email} onChange={(e) => setEmail(e.target.value)} />
-        <button className="btn-primary" disabled={loading || !email.trim()}>{loading ? "…" : (t("account.lookup") ?? "Find my orders")}</button>
-      </form>
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-
-      {orders !== null && orders.length === 0 && !error && (
-        <div className="card mt-8 p-8 text-center">
-          <div className="text-3xl">📭</div>
-          <p className="mt-3 text-gray-600">{t("account.noOrders") ?? "No orders found for this email yet."}</p>
-          <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Link href="/products" className="btn-primary">{t("cart.continue")}</Link>
-            <Link href="/contact" className="btn-secondary">{t("account.contact") ?? "Contact support"}</Link>
-          </div>
-        </div>
-      )}
-
-      {orders !== null && orders.length > 0 && (
+      {!loggedIn ? (
         <>
-          {/* Profile card */}
-          {profile && (
-            <div className="card mt-6 flex flex-wrap items-center gap-4 p-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-accent/10 text-lg font-bold text-brand-accent">
-                {profile.name?.charAt(0)?.toUpperCase() ?? "?"}
-              </div>
-              <div className="min-w-0">
-                <div className="font-semibold text-gray-900">{profile.name}</div>
-                <div className="text-sm text-gray-400">{profile.email}</div>
-              </div>
-              <div className="ml-auto text-right text-sm text-gray-500">
-                <div>{counts.all} {counts.all === 1 ? "order" : "orders"}</div>
-                <div>{counts.toReview > 0 && <span className="text-amber-600">{counts.toReview} pending review</span>}</div>
+          {/* Guest login card */}
+          <form className="card mt-6 p-6" onSubmit={login}>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                className="input flex-1"
+                placeholder={t("account.emailPlaceholder") ?? "your@email.com"}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <button className="btn-primary" disabled={loading || !email.trim()}>
+                {loading ? "…" : (t("account.loginBtn") ?? "Sign in")}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-gray-400">
+              {t("account.guestHint") ?? "Guest sign-in: enter your email to view your orders and place new ones. No password or registration needed."}
+            </p>
+          </form>
+          {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+        </>
+      ) : (
+        <>
+          {/* Signed-in header */}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-gray-500">
+              {t("account.signedInAs") ?? "Signed in as"}:{" "}
+              <span className="font-semibold text-gray-900">{searchedFor || email}</span>
+            </p>
+            <button onClick={logout} className="text-sm text-gray-400 hover:text-red-600 hover:underline">
+              {t("account.logout") ?? "Sign out"}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+
+          {orders !== null && orders.length === 0 && (
+            <div className="card mt-4 p-8 text-center">
+              <div className="text-3xl">📭</div>
+              <p className="mt-3 text-gray-600">{t("account.noOrders") ?? "No orders yet — start shopping!"}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <Link href="/products" className="btn-primary">{t("cart.continue")}</Link>
+                <Link href="/contact" className="btn-secondary">{t("account.contact") ?? "Contact support"}</Link>
               </div>
             </div>
           )}
 
-          {/* Status tabs */}
-          <div className="mt-6 flex gap-1.5 overflow-x-auto border-b border-gray-200 pb-0">
-            {TABS.map((tb) => (
-              <button
-                key={tb.key}
-                onClick={() => setTab(tb.key)}
-                className={`whitespace-nowrap px-3 py-2 text-sm font-medium ${tab === tb.key ? "border-b-2 border-brand-accent text-gray-900" : "text-gray-500 hover:text-gray-800"}`}
-              >
-                {tb.label}{counts[tb.key] > 0 && <span className="ml-1 rounded-full bg-brand-accent/10 px-1.5 py-0.5 text-xs text-brand-accent">{counts[tb.key]}</span>}
-              </button>
-            ))}
-          </div>
+          {orders !== null && orders.length > 0 && (
+            <>
+              {/* Profile card */}
+              {profile && (
+                <div className="card mt-4 flex flex-wrap items-center gap-4 p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-accent/10 text-lg font-bold text-brand-accent">
+                    {profile.name?.charAt(0)?.toUpperCase() ?? "?"}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900">{profile.name}</div>
+                    <div className="text-sm text-gray-400">{profile.email}</div>
+                  </div>
+                  <div className="ml-auto text-right text-sm text-gray-500">
+                    <div>{counts.all} {counts.all === 1 ? "order" : "orders"}</div>
+                    <div>{counts.toReview > 0 && <span className="text-amber-600">{counts.toReview} pending review</span>}</div>
+                  </div>
+                </div>
+              )}
 
-          {/* Orders */}
-          <div className="mt-4 space-y-4">
-            {shown.length === 0 && <p className="py-10 text-center text-sm text-gray-400">{t("account.noInTab") ?? "No orders in this category."}</p>}
-            {shown.map((o) => {
-              const open = openId === o.id;
-              const reviewed = new Set(reviewsByOrder[o.id] ?? []);
-              const unreviewedItems = o.status === "delivered" ? (o.items ?? []).filter((it) => !reviewed.has(it.productId)) : [];
+              {/* Status tabs */}
+              <div className="mt-6 flex gap-1.5 overflow-x-auto border-b border-gray-200 pb-0">
+                {TABS.map((tb) => (
+                  <button
+                    key={tb.key}
+                    onClick={() => setTab(tb.key)}
+                    className={`whitespace-nowrap px-3 py-2 text-sm font-medium ${tab === tb.key ? "border-b-2 border-brand-accent text-gray-900" : "text-gray-500 hover:text-gray-800"}`}
+                  >
+                    {tb.label}{counts[tb.key] > 0 && <span className="ml-1 rounded-full bg-brand-accent/10 px-1.5 py-0.5 text-xs text-brand-accent">{counts[tb.key]}</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Orders */}
+              <div className="mt-4 space-y-4">
+                {shown.length === 0 && <p className="py-10 text-center text-sm text-gray-400">{t("account.noInTab") ?? "No orders in this category."}</p>}
+                {shown.map((o) => {
+                  const open = openId === o.id;
+                  const reviewed = new Set(reviewsByOrder[o.id] ?? []);
+                  const unreviewedItems = o.status === "delivered" ? (o.items ?? []).filter((it) => !reviewed.has(it.productId)) : [];
               return (
                 <div key={o.id} className="card overflow-hidden">
                   <button className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-gray-50" onClick={() => setOpenId(open ? null : o.id)}>
@@ -435,6 +501,8 @@ function AccountInner() {
               );
             })}
           </div>
+        </>
+      )}
         </>
       )}
 
