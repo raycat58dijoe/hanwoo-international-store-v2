@@ -59,7 +59,7 @@ const LOW_STOCK_THRESHOLD = 5;
 
 export default function AdminPage() {
   const { t } = useI18n();
-  const [key, setKey] = useState("");
+  const [key, setKey] = useState(() => typeof window !== "undefined" ? (localStorage.getItem("adminKey") ?? "") : "");
   const [tab, setTab] = useState<"dashboard" | "products" | "orders">("dashboard");
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<FormState | null>(null);
@@ -76,10 +76,9 @@ export default function AdminPage() {
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const saved = localStorage.getItem("adminKey") ?? "";
-    setKey(saved);
-    if (saved) { load(); loadOrders(); }
-  }, []);
+    if (key) { load(); loadOrders(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   async function load() {
     try {
