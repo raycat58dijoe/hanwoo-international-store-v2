@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Product } from "@/lib/types";
 import { useI18n } from "./I18nProvider";
 import { ProductCard } from "./ProductCard";
+import { categoryLabel } from "@/lib/categories";
 
 export type SortKey = "newest" | "price-asc" | "price-desc";
 
@@ -89,21 +90,21 @@ export function ProductsView({
       <div className="flex gap-8">
         {/* Sidebar: real categories only */}
         <aside className="filter-sidebar hidden lg:block">
-          <div className="filter-header">Filter</div>
+          <div className="filter-header">{t("shop.filterHeader")}</div>
 
           <div
             className={`filter-group ${cat === "all" ? "open" : ""}`}
             onClick={() => setCat("all")}
           >
-            <div className="filter-group-title cursor-pointer">Show All</div>
+            <div className="filter-group-title cursor-pointer">{t("shop.showAll")}</div>
           </div>
 
           <div className={`filter-group ${cat === "featured" ? "open" : ""}`} onClick={() => setCat("featured")}>
-            <div className="filter-group-title cursor-pointer">{t("nav.featured") ?? "Featured"}</div>
+            <div className="filter-group-title cursor-pointer">{t("nav.featured")}</div>
           </div>
 
           <div className="filter-group open">
-            <div className="filter-group-title">Category</div>
+            <div className="filter-group-title">{t("shop.categoryLabel")}</div>
             <div className="filter-options">
               {categories.map((c) => (
                 <label
@@ -117,7 +118,7 @@ export function ProductsView({
                     checked={cat === c}
                     readOnly
                   />
-                  <span>{c}</span>
+                  <span>{categoryLabel(c, locale)}</span>
                 </label>
               ))}
             </div>
