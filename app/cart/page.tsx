@@ -45,7 +45,7 @@ export default function CartPage() {
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-amber-800">
-              Add <strong>{formatMoney(SHIPPING_THRESHOLD - totalUSD, "USD")}</strong> to get <strong>free shipping</strong>
+              (t("cart.freeShipProgress") ?? "Add {amount} more to get free shipping").replace("{amount}", formatMoney(SHIPPING_THRESHOLD - totalUSD, "USD"))
             </span>
             <span className="text-amber-600">{formatMoney(totalUSD, "USD")} / {formatMoney(SHIPPING_THRESHOLD, "USD")}</span>
           </div>
@@ -58,7 +58,7 @@ export default function CartPage() {
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
-          <p className="text-sm font-medium text-green-800">🎉 You got <strong>free shipping</strong>!</p>
+          <p className="text-sm font-medium text-green-800">{t("cart.freeShipReached")}</p>
         </div>
       )}
 

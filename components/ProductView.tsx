@@ -133,7 +133,7 @@ export function ProductView({ product, related }: { product: Product; related?: 
           <ul className="mt-4 space-y-1.5 text-sm text-[var(--fg-secondary)]">
             <li className="flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Free international shipping over $80
+              {t("product.freeShippingNotice")}
             </li>
             <li className="flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -219,7 +219,7 @@ export function ProductView({ product, related }: { product: Product; related?: 
       {/* You may also like */}
       {related && related.length > 0 && (
         <section className="mt-16">
-          <h2 className="text-xl font-bold text-gray-900">You may also like</h2>
+          <h2 className="text-xl font-bold text-gray-900">{t("product.alsoLike")}</h2>
           <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
             {related
               .filter((r) => r.id !== product.id && r.active)

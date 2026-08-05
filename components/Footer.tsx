@@ -18,13 +18,13 @@ export function Footer() {
               HANWOO
             </div>
             <p className="text-xs leading-relaxed text-[var(--fg-on-dark-muted)]">
-              Premium electronics & tech accessories. Free international shipping on orders over $80.
+              {t("home.hero.subtitle")}
             </p>
           </div>
 
           {/* Shop */}
           <div>
-            <h4 className="footer-heading">Shop</h4>
+            <h4 className="footer-heading">{t("nav.shop")}</h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/products?category=Charger">Chargers</Link></li>
               <li><Link href="/products?category=Power+Bank">Power Banks</Link></li>
@@ -36,32 +36,31 @@ export function Footer() {
 
           {/* Support */}
           <div>
-            <h4 className="footer-heading">Support</h4>
+            <h4 className="footer-heading">{t("footer.support")}</h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/account">{t("nav.account")}</Link></li>
-              <li><Link href="/track">Track Order</Link></li>
-              <li><Link href="/faq">FAQ</Link></li>
-              <li><Link href="/shipping">Shipping Info</Link></li>
-              <li><Link href="/returns">Returns & Warranty</Link></li>
-              <li><Link href="/contact">Contact Us</Link></li>
+              <li><Link href="/track">{t("footer.trackOrder")}</Link></li>
+              <li><Link href="/faq">{t("footer.faqs")}</Link></li>
+              <li><Link href="/shipping">{t("footer.shippingInfo")}</Link></li>
+              <li><Link href="/returns">{t("footer.returns")}</Link></li>
+              <li><Link href="/contact">{t("footer.contactUs")}</Link></li>
             </ul>
           </div>
 
           {/* Company */}
           <div>
-            <h4 className="footer-heading">Company</h4>
+            <h4 className="footer-heading">{t("footer.about")}</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/contact">About Us</Link></li>
-              <li><Link href="/contact">Wholesale</Link></li>
-              <li><Link href="/privacy">Privacy Policy</Link></li>
-              <li><Link href="/terms">Terms of Service</Link></li>
+              <li><Link href="/contact">{t("footer.contactUs")}</Link></li>
+              <li><Link href="/privacy">{t("footer.privacy")}</Link></li>
+              <li><Link href="/terms">{t("footer.terms")}</Link></li>
             </ul>
           </div>
         </div>
 
         {/* Bottom: copyright + payment icons */}
         <div className="flex flex-col items-center justify-between gap-3 pt-6 text-xs text-[var(--fg-on-dark-muted)] sm:flex-row">
-          <span>© {year} Hanwoo International Inc. {t("footer.rights")}</span>
+          <span>{(t("footer.copyright") ?? "© {year} Hanwoo International Inc.").replace("{year}", String(year))}</span>
           <div className="flex items-center gap-3 opacity-60">
             <span className="font-bold tracking-wide">Stripe</span>
             <span className="font-bold tracking-wide">Zelle</span>

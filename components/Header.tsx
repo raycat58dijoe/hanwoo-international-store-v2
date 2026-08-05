@@ -52,7 +52,7 @@ export function Header() {
     <>
       {/* Announcement bar */}
       <div className="announcement-bar">
-        Free international shipping for orders above US$80 (not applicable for orders with power banks)
+        {t("announcement.bar")}
       </div>
 
       {/* Main navbar */}

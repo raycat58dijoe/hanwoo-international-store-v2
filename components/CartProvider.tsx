@@ -11,6 +11,7 @@ import {
   ReactNode,
 } from "react";
 import Link from "next/link";
+import { useI18n } from "./I18nProvider";
 import type { Localized } from "@/lib/types";
 
 export interface CartItem {
@@ -106,18 +107,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
 /** Mini confirmation popup shown after adding an item to cart. */
 function CartToast() {
   const { toast, dismissToast, count, totalUSD } = useCart();
+  const { t } = useI18n();
   if (!toast) return null;
   return (
     <div className="fixed bottom-6 left-1/2 z-50 w-[380px] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl animate-slide-up">
       <div className="flex items-start gap-3">
         <span className="text-xl">🛒</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">Added to cart</p>
+          <p className="text-sm font-semibold text-gray-900">{t("toast.added")}</p>
           <p className="mt-0.5 text-xs text-gray-500 truncate">{toast.name.en}</p>
-          <p className="mt-1 text-xs text-gray-400">{count} item{count !== 1 ? "s" : ""} · ${totalUSD.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-gray-400">{count} {count === 1 ? (t("cart.item") ?? "item") : (t("cart.items") ?? "items")} · ${totalUSD.toFixed(2)}</p>
           <div className="mt-3 flex gap-2">
-            <button onClick={dismissToast} className="btn-secondary px-4 py-1.5 text-xs">Continue shopping</button>
-            <a href="/cart" className="btn-primary px-4 py-1.5 text-xs">View cart</a>
+            <button onClick={dismissToast} className="btn-secondary px-4 py-1.5 text-xs">{t("toast.continue")}</button>
+            <a href="/cart" className="btn-primary px-4 py-1.5 text-xs">{t("toast.viewCart")}</a>
           </div>
         </div>
         <button onClick={dismissToast} className="text-gray-300 hover:text-gray-600 text-lg leading-none">&times;</button>
