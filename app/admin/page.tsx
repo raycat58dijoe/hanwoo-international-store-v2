@@ -110,6 +110,15 @@ export default function AdminPage() {
   }, [tab, key]);
 
   async function saveKey() {
+    setMsg("");
+    try {
+      const res = await fetch("/api/auth/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) });
+      const d = await res.json();
+      if (!d.ok) { setMsg("Incorrect key. Please try again."); return; }
+    } catch {
+      setMsg("Unable to verify the key right now. Please try again.");
+      return;
+    }
     localStorage.setItem("adminKey", key);
     load();
     loadOrders();
