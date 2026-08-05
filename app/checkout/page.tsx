@@ -20,6 +20,8 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState<PaymentMethod>("stripe");
   const [zelle, setZelle] = useState<{ id: string; amountUSD: number; currency: string; orderId: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipFilled, setZipFilled] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -98,6 +100,29 @@ export default function CheckoutPage() {
   };
 
   const selectedRegions = regionsForCountry(form.country);
+
+  // Auto-fill city & state from US / CA postal code via Zippopotam.us (free, no key).
+  async function lookupZip(raw: string) {
+    const zip = raw.trim();
+    const cc = form.country;
+    if (cc !== "US" && cc !== "CA") return;
+    // US: 5 digits  |  CA: A1A 1A1
+    const ok = cc === "US" ? /^\d{5}$/.test(zip) : /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/i.test(zip);
+    if (!ok) { setZipFilled(false); return; }
+    setZipLoading(true); setZipFilled(false);
+    try {
+      const res = await fetch(`https://api.zippopotam.us/${cc.toLowerCase()}/${encodeURIComponent(zip)}`);
+      if (!res.ok) { setZipLoading(false); return; }
+      const d = await res.json();
+      const place = d.places?.[0];
+      const city = place?.["place name"] ?? "";
+      const state = place?.state ?? place?.["state abbreviation"] ?? "";
+      if (!city && !state) { setZipLoading(false); return; }
+      setForm((f) => ({ ...f, city: city, state: state }));
+      setZipFilled(true);
+    } catch { /* ignore — 3rd party down */ }
+    finally { setZipLoading(false); }
+  }
 
   const confirmZelleSent = async () => {
     if (!zelle) return;
@@ -221,18 +246,24 @@ export default function CheckoutPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.city")}</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {t("checkout.city")}
+                {zipFilled && <span className="ml-1 text-xs text-green-600">(auto)</span>}
+              </label>
               <input
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                className={`w-full rounded-lg border px-3 py-2 outline-none focus:border-brand-accent ${zipFilled ? "border-green-300 bg-green-50" : "border-gray-300"}`}
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.state")}</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {t("checkout.state")}
+                {zipFilled && <span className="ml-1 text-xs text-green-600">(auto)</span>}
+              </label>
               {selectedRegions ? (
                 <select
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                  className={`w-full rounded-lg border px-3 py-2 outline-none focus:border-brand-accent ${zipFilled ? "border-green-300 bg-green-50" : "border-gray-300"}`}
                   value={form.state}
                   onChange={(e) => setForm({ ...form, state: e.target.value })}
                 >
@@ -243,7 +274,7 @@ export default function CheckoutPage() {
                 </select>
               ) : (
                 <input
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                  className={`w-full rounded-lg border px-3 py-2 outline-none focus:border-brand-accent ${zipFilled ? "border-green-300 bg-green-50" : "border-gray-300"}`}
                   placeholder={t("checkout.stateOther") ?? "State / Province"}
                   value={form.state}
                   onChange={(e) => setForm({ ...form, state: e.target.value })}
@@ -267,12 +298,20 @@ export default function CheckoutPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">{t("checkout.zip")}</label>
-              <input
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
-                placeholder={form.country === "US" ? "10001" : form.country === "CA" ? "A1A 1A1" : form.country === "MX" ? "01000" : t("checkout.zipPlaceholder") ?? "Postal code"}
-                value={form.zip}
-                onChange={(e) => setForm({ ...form, zip: e.target.value })}
-              />
+              <div className="relative">
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-accent"
+                  placeholder={form.country === "US" ? "10001 – auto-fill city & state" : form.country === "CA" ? "A1A 1A1" : form.country === "MX" ? "01000" : t("checkout.zipPlaceholder") ?? "Postal code"}
+                  value={form.zip}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm({ ...form, zip: v });
+                    lookupZip(v);
+                  }}
+                />
+                {zipLoading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-brand-accent">⏳</span>}
+                {zipFilled && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-green-600">✓ filled</span>}
+              </div>
             </div>
           </div>
 
