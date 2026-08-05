@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useI18n } from "./I18nProvider";
+import { categoryLabel } from "@/lib/categories";
 
 export function Footer() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const year = new Date().getFullYear();
 
   return (
@@ -26,11 +27,11 @@ export function Footer() {
           <div>
             <h4 className="footer-heading">{t("nav.shop")}</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/products?category=Charger">Chargers</Link></li>
-              <li><Link href="/products?category=Power+Bank">Power Banks</Link></li>
-              <li><Link href="/products?category=Cable">Cables</Link></li>
-              <li><Link href="/products?category=Hub">USB-C Hubs</Link></li>
-              <li><Link href="/products?category=Earbuds">Audio</Link></li>
+              <li><Link href="/products?category=Charger">{categoryLabel("Charger", locale)}</Link></li>
+              <li><Link href="/products?category=Power+Bank">{categoryLabel("Power Bank", locale)}</Link></li>
+              <li><Link href="/products?category=Cable">{categoryLabel("Cable", locale)}</Link></li>
+              <li><Link href="/products?category=Hub">{categoryLabel("Hub", locale)}</Link></li>
+              <li><Link href="/products?category=Earbuds">{categoryLabel("Earbuds", locale)}</Link></li>
             </ul>
           </div>
 

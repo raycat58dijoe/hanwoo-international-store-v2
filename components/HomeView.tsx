@@ -3,10 +3,11 @@
 import Link from "next/link";
 import type { Product } from "@/lib/types";
 import { useI18n } from "./I18nProvider";
+import { categoryLabel } from "@/lib/categories";
 import { ProductCard } from "./ProductCard";
 
 export function HomeView({ products }: { products: Product[] }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const featured = products.filter((p) => p.featured).slice(0, 6);
   const bestSellers = products.slice(0, 6);
   const categories = Array.from(new Set(products.map((p) => p.category))).sort().slice(0, 8);
@@ -52,14 +53,14 @@ export function HomeView({ products }: { products: Product[] }) {
       {/* Breadcrumb */}
       <div className="container-page">
         <div className="breadcrumb">
-          <Link href="/">Home</Link> &nbsp;/&nbsp; <span>Collections</span> &nbsp;/&nbsp; <span>Best Seller</span>
+          <Link href="/">{t("nav.home")}</Link> &nbsp;/&nbsp; <span>{t("home.collections")}</span> &nbsp;/&nbsp; <span>{t("home.bestSeller")}</span>
         </div>
       </div>
 
       {/* Best Seller Section */}
       <section className="container-page pb-16">
         <div className="flex items-end justify-between mb-8">
-          <h2 className="section-title">Best Seller</h2>
+          <h2 className="section-title">{t("home.bestSeller")}</h2>
           <Link href="/products" className="sort-dropdown">
             {t("home.viewAll")} →
           </Link>
@@ -68,18 +69,18 @@ export function HomeView({ products }: { products: Product[] }) {
         <div className="flex gap-8">
           {/* Category quick links (desktop) */}
           <aside className="filter-sidebar hidden lg:block">
-            <div className="filter-header">Shop by Category</div>
+            <div className="filter-header">{t("home.shopByCategory")}</div>
             {categories.map((c) => (
               <Link
                 key={c}
                 href={`/products?category=${encodeURIComponent(c)}`}
                 className="filter-option block"
               >
-                {c}
+                {categoryLabel(c, locale)}
               </Link>
             ))}
             <Link href="/products" className="filter-option block font-medium">
-              View all →
+              {t("home.viewAll")} →
             </Link>
           </aside>
 
