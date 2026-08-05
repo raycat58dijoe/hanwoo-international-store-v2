@@ -5,5 +5,10 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const products = await getProducts();
-  return <HomeView products={products} />;
+  // build-marker: deploy-2026-08-05-v2
+  return (
+    <>
+      <HomeView products={products} />
+    </>
+  );
 }
