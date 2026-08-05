@@ -4,6 +4,8 @@ import type { Product } from "@/lib/types";
 
 const ADMIN_KEY = process.env.ADMIN_KEY ?? "admin123";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return NextResponse.json({ products: await getAllProducts() });
 }
