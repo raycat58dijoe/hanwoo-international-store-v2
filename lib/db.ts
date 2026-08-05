@@ -379,6 +379,21 @@ export async function deleteSession(token: string): Promise<void> {
   catch (e: any) { console.error("[deleteSession] failed:", e?.message); }
 }
 
+/* DIAGNOSTIC probe — temporarily exported for auth debugging. */
+export async function __neonProbe(token: string) {
+  const neon = await getNeon();
+  if (!neon) return { mode: "memory" };
+  const tryQuery = async (label: string, sql: string, params?: unknown[]) => {
+    try { await neon.queryWithSchema(sql, params); return label + ":OK"; }
+    catch (e: any) { return label + ":" + (e?.message ?? "").slice(0, 90); }
+  };
+  return {
+    selectSessions: await tryQuery("select", "SELECT COUNT(*) FROM sessions"),
+    insertSessions: await tryQuery("insert", "INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)", ["probe-" + token.slice(0, 12), "probe", new Date().toISOString(), new Date().toISOString()]),
+    insertReviews: await tryQuery("rev", "INSERT INTO reviews (id,product_id,order_id,customer_name,rating,comment,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", ["probe-rev-" + token.slice(0, 8), "p_probe", "ord_probe", "", 5, "", new Date().toISOString()]),
+  };
+}
+
 export function genId(prefix: string): string {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }

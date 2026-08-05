@@ -21,10 +21,14 @@ export async function POST(req: NextRequest) {
   const token = newSessionToken();
   const sessionError = await createSession(token, user.id, sessionExpiry());
 
+  // DIAGNOSTIC: probe what works vs what fails on this connection
+  const neon = (await import("@/lib/db")).__neonProbe;
+  const probe = neon ? await neon(token) : null;
+
   const res = NextResponse.json({
     ok: true,
     user: { id: user.id, email: user.email, name: user.name },
-    debug: { sessionError },
+    debug: { sessionError, probe },
   });
   res.headers.set("Set-Cookie", sessionCookieHeader(token));
   return res;
