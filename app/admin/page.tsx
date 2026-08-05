@@ -93,9 +93,11 @@ export default function AdminPage() {
   async function loadOrders() {
     try {
       const res = await fetch("/api/orders", { headers: { "x-admin-key": key } });
+      if (!res.ok) throw new Error("AUTH");
       const data = await res.json();
       setOrders(data.orders ?? []);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.message === "AUTH") { setKey(""); localStorage.removeItem("adminKey"); setMsg("Invalid login. Please enter the correct key."); return; }
       console.error("[admin] load orders failed", e);
     }
   }
@@ -104,12 +106,17 @@ export default function AdminPage() {
     if (!key) return;
     if (tab === "orders" || tab === "dashboard") {
       loadOrders();
-      load(); // refresh products so dashboard stats reflect current inventory
+      load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, key]);
 
   async function saveKey() {
+    setMsg("");
+    // Verify against the server before trusting the key.
+    const res = await fetch("/api/auth/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) });
+    const d = await res.json();
+    if (!d.ok) { setMsg("Incorrect key. Please try again."); return; }
     localStorage.setItem("adminKey", key);
     load();
     loadOrders();
