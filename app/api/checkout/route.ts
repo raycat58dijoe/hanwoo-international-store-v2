@@ -140,6 +140,14 @@ export async function POST(req: NextRequest) {
     // Demo mode: no Stripe key configured.
     return NextResponse.json({ orderId: order.id, demo: true, shippingUSD, subtotalUSD });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? "Checkout failed" }, { status: 500 });
+    // Translate raw DB / Neon errors into a user-friendly message — don't leak
+    // "password authentication failed" or other internal details to customers.
+    console.error("[checkout] failed:", err?.message);
+    const msg = String(err?.message ?? "");
+    let friendly = "We couldn't save your order right now. Please try again in a moment.";
+    if (/DATABASE_UNAVAILABLE|Neon HTTP|password authentication|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(msg)) {
+      friendly = "We're having trouble reaching our database. Please try again in a moment.";
+    }
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }
