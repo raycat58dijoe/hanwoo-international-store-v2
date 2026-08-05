@@ -106,7 +106,7 @@ export async function deleteProduct(id: string): Promise<Product[]> {
 /* ---------- orders ---------- */
 export async function createOrder(o: Order): Promise<Order> {
   const neon = await getNeon();
-  if (!neon) { memOrders.push(o); return o; }
+  if (!neon) throw new Error("DATABASE_UNAVAILABLE: please retry in a moment");
   try {
     await neon.queryWithSchema(
       `INSERT INTO orders (id,items,amount_usd,currency,customer,user_id,status,payment_method,zelle_confirmed,stripe_session_id,shipping_usd,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
@@ -114,10 +114,11 @@ export async function createOrder(o: Order): Promise<Order> {
     );
     return o;
   } catch (e: any) {
-    console.error("[createOrder] INSERT failed:", e?.message);
-    // Fall back to in-memory so the request still completes (no infinite retry).
-    memOrders.push(o);
-    return o;
+    // Do NOT silently fall back to in-memory: that hides real failures and
+    // makes orders "vanish" once the serverless instance recycles. Surface
+    // the error so the customer sees a clear retry message.
+    console.error("[createOrder] failed:", e?.message);
+    throw e;
   }
 }
 
