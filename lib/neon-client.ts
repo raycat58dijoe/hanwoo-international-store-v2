@@ -93,6 +93,23 @@ function ensureSchema(): Promise<void> {
         created_at TEXT NOT NULL
       )`);
 
+      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id TEXT`);
+
+      // Accounts & sessions (password-based auth)
+      await query(`CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        name TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )`);
+
       // Dynamic import of seed to avoid circular deps
       const { SEED_PRODUCTS } = await import("./seed");
       const rows = await query<{ count: number }>("SELECT COUNT(*)::int AS count FROM products");

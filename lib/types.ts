@@ -40,6 +40,14 @@ export interface Review {
   createdAt: string;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  passwordHash: string;
+  name: string;
+  createdAt: string;
+}
+
 export type PaymentMethod = "stripe" | "zelle";
 
 /**
@@ -57,6 +65,8 @@ export interface Order {
   items: OrderItem[];
   amountUSD: number;
   currency: string;
+  /** Account id when placed by a signed-in user; undefined for guest checkout. */
+  userId?: string;
   customer: {
     name: string;
     email: string;

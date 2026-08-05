@@ -120,9 +120,7 @@ function ReviewModal({ order, item, onClose, onDone }: { order: Order; item: Ord
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Failed to submit");
       onDone(); onClose();
-    } catch (e: any) {
-      setErr(e.message); setBusy(false);
-    }
+    } catch (e: any) { setErr(e.message); setBusy(false); }
   };
 
   return (
@@ -136,13 +134,7 @@ function ReviewModal({ order, item, onClose, onDone }: { order: Order; item: Ord
         </div>
         <div className="mt-4">
           <div className="mb-1 text-sm font-medium text-gray-700">{t("account.comment") ?? "Your review"}</div>
-          <textarea
-            className="input"
-            rows={4}
-            placeholder={t("account.commentPlaceholder") ?? "Share your experience with this product…"}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-          />
+          <textarea className="input" rows={4} placeholder={t("account.commentPlaceholder") ?? "Share your experience…"} value={comment} onChange={(e) => setComment(e.target.value)} />
         </div>
         {err && <p className="mt-2 text-sm text-red-500">{err}</p>}
         <div className="mt-4 flex gap-2">
@@ -172,9 +164,7 @@ function ReturnModal({ order, onClose, onDone }: { order: Order; onClose: () => 
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Failed to submit");
       onDone(); onClose();
-    } catch (e: any) {
-      setErr(e.message); setBusy(false);
-    }
+    } catch (e: any) { setErr(e.message); setBusy(false); }
   };
 
   return (
@@ -205,14 +195,14 @@ function ReturnModal({ order, onClose, onDone }: { order: Order; onClose: () => 
 function AccountInner() {
   const params = useSearchParams();
   const { t, locale } = useI18n();
-  const [email, setEmail] = useState(() =>
-    typeof window !== "undefined"
-      ? (localStorage.getItem("acc_email") ?? params.get("email") ?? "")
-      : (params.get("email") ?? "")
-  );
-  const [loggedIn, setLoggedIn] = useState(
-    () => typeof window !== "undefined" && !!localStorage.getItem("acc_email")
-  );
+  const [user, setUser] = useState<{ id: string; email: string; name: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [authErr, setAuthErr] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guestEmail, setGuestEmail] = useState(() => (typeof window !== "undefined" ? (localStorage.getItem("acc_email") ?? params.get("email") ?? "") : (params.get("email") ?? "")));
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [searchedFor, setSearchedFor] = useState("");
   const [error, setError] = useState("");
@@ -225,7 +215,7 @@ function AccountInner() {
 
   async function lookup(em: string) {
     const e = em.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { setError("Please enter a valid email address."); return; }
+    if (!e) return;
     setLoading(true); setError(""); setOrders(null); setOpenId(null); setTab("all"); setReviewsByOrder({});
     try {
       const res = await fetch("/api/orders/lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: e }) });
@@ -233,7 +223,6 @@ function AccountInner() {
       if (!res.ok) throw new Error(d.error || "Lookup failed");
       const list: Order[] = d.orders ?? [];
       setOrders(list); setSearchedFor(e);
-      // fetch reviews for delivered orders to know which items were reviewed
       const map: Record<string, string[]> = {};
       await Promise.all(list.filter((o) => o.status === "delivered").map(async (o) => {
         try {
@@ -242,37 +231,58 @@ function AccountInner() {
         } catch { map[o.id] = []; }
       }));
       setReviewsByOrder(map);
-    } catch (err: any) {
-      setError(err.message);
-    } finally { setLoading(false); }
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
-  // Guest login: email is the identity (no password). Remembered in localStorage.
-  function login(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError("Please enter a valid email address."); return; }
-    const em = email.trim().toLowerCase();
-    localStorage.setItem("acc_email", em);
-    setLoggedIn(true);
-    lookup(em);
-  }
-
-  function logout() {
-    localStorage.removeItem("acc_email");
-    setLoggedIn(false); setOrders(null); setEmail(""); setError("");
-  }
-
+  // Session check on mount
   useEffect(() => {
-    const em = typeof window !== "undefined" ? localStorage.getItem("acc_email") : null;
-    if (em) lookup(em);
-    else if (params.get("email")) {
-      const p = params.get("email")!;
-      localStorage.setItem("acc_email", p);
-      setLoggedIn(true);
-      lookup(p);
-    }
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user) {
+          setUser(d.user);
+          localStorage.setItem("acc_email", d.user.email);
+          lookup(d.user.email);
+        } else if (params.get("email")) {
+          setGuestOpen(true);
+          setGuestEmail(params.get("email")!);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function submitAuth(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthErr("");
+    const em = authForm.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setAuthErr("Please enter a valid email address."); return; }
+    if (authForm.password.length < 8) { setAuthErr("Password must be at least 8 characters."); return; }
+    if (authMode === "register" && authForm.password !== authForm.confirm) { setAuthErr("Passwords do not match."); return; }
+    setAuthBusy(true);
+    try {
+      if (authMode === "register") {
+        const reg = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: authForm.name, email: em, password: authForm.password }) });
+        const rd = await reg.json();
+        if (!reg.ok) throw new Error(rd.error || "Registration failed");
+      }
+      const log = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: em, password: authForm.password }) });
+      const ld = await log.json();
+      if (!log.ok) throw new Error(ld.error || "Sign-in failed");
+      setUser(ld.user);
+      localStorage.setItem("acc_email", ld.user.email);
+      lookup(ld.user.email);
+    } catch (err: any) { setAuthErr(err.message); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    localStorage.removeItem("acc_email");
+    setUser(null); setOrders(null); setAuthForm({ name: "", email: "", password: "", confirm: "" });
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: orders?.length ?? 0, pending: 0, paid: 0, shipped: 0, toReview: 0, returns: 0 };
@@ -313,35 +323,79 @@ function AccountInner() {
     { key: "returns", label: t("account.tabReturns") ?? "Returns" },
   ];
 
+  if (!authChecked) {
+    return <div className="container-page py-24 text-center text-gray-400">…</div>;
+  }
+
   return (
     <div className="container-page max-w-3xl py-10">
       <h1 className="text-2xl font-bold text-gray-900">{t("account.title") ?? "My Account"}</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        {loggedIn
-          ? (t("account.loggedInSub") ?? "Welcome back! Here are your orders.")
-          : (t("account.subtitle") ?? "Sign in with your email to manage your orders — no password needed.")}
-      </p>
 
-      {!loggedIn ? (
+      {!user ? (
         <>
-          {/* Guest login card */}
-          <form className="card mt-6 p-6" onSubmit={login}>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                className="input flex-1"
-                placeholder={t("account.emailPlaceholder") ?? "your@email.com"}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <button className="btn-primary" disabled={loading || !email.trim()}>
-                {loading ? "…" : (t("account.loginBtn") ?? "Sign in")}
-              </button>
+          {/* Sign in / register card */}
+          <div className="card mt-6 p-6">
+            <div className="flex gap-2 border-b border-gray-200 pb-3">
+              {(["login", "register"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setAuthMode(m); setAuthErr(""); }}
+                  className={`px-4 py-2 text-sm font-medium ${authMode === m ? "border-b-2 border-brand-accent text-gray-900" : "text-gray-500"}`}
+                >
+                  {m === "login" ? (t("auth.login") ?? "Sign in") : (t("auth.register") ?? "Create account")}
+                </button>
+              ))}
             </div>
-            <p className="mt-3 text-xs text-gray-400">
-              {t("account.guestHint") ?? "Guest sign-in: enter your email to view your orders and place new ones. No password or registration needed."}
-            </p>
-          </form>
+
+            <form className="mt-5 space-y-4" onSubmit={submitAuth}>
+              {authMode === "register" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">{t("auth.name") ?? "Name"} <span className="font-normal text-gray-400">({t("auth.optional") ?? "optional"})</span></label>
+                  <input className="input" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} />
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">{t("auth.email") ?? "Email"}</label>
+                <input type="email" className="input" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">{t("auth.password") ?? "Password"}</label>
+                <input type="password" className="input" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} />
+              </div>
+              {authMode === "register" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">{t("auth.confirm") ?? "Confirm password"}</label>
+                  <input type="password" className="input" value={authForm.confirm} onChange={(e) => setAuthForm({ ...authForm, confirm: e.target.value })} />
+                </div>
+              )}
+              {authErr && <p className="text-sm text-red-500">{authErr}</p>}
+              <button className="btn-primary w-full" disabled={authBusy}>
+                {authBusy ? "…" : authMode === "login" ? (t("auth.login") ?? "Sign in") : (t("auth.register") ?? "Create account")}
+              </button>
+              <p className="text-center text-xs text-gray-400">
+                {authMode === "login" ? (t("auth.noAccount") ?? "New here?") : (t("auth.hasAccount") ?? "Already have an account?")}{" "}
+                <button type="button" className="text-brand-accent hover:underline" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthErr(""); }}>
+                  {authMode === "login" ? (t("auth.register") ?? "Create account") : (t("auth.login") ?? "Sign in")}
+                </button>
+              </p>
+            </form>
+          </div>
+
+          {/* Guest quick lookup */}
+          <div className="mt-4 text-center">
+            <button className="text-sm text-gray-400 hover:text-gray-700 hover:underline" onClick={() => setGuestOpen(!guestOpen)}>
+              {t("auth.guestLookup") ?? "No account? Look up an order by email →"}
+            </button>
+          </div>
+          {guestOpen && (
+            <form
+              className="card mt-3 flex gap-2 p-4"
+              onSubmit={(e) => { e.preventDefault(); lookup(guestEmail); }}
+            >
+              <input type="email" className="input flex-1" placeholder={t("account.emailPlaceholder") ?? "your@email.com"} value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
+              <button className="btn-secondary" disabled={loading || !guestEmail.trim()}>{loading ? "…" : (t("account.lookup") ?? "Look up")}</button>
+            </form>
+          )}
           {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
         </>
       ) : (
@@ -349,14 +403,16 @@ function AccountInner() {
           {/* Signed-in header */}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-gray-500">
-              {t("account.signedInAs") ?? "Signed in as"}:{" "}
-              <span className="font-semibold text-gray-900">{searchedFor || email}</span>
+              {t("account.signedInAs") ?? "Signed in as"}: <span className="font-semibold text-gray-900">{user.name || user.email}</span>
+              <span className="ml-1 text-gray-400">({user.email})</span>
             </p>
             <button onClick={logout} className="text-sm text-gray-400 hover:text-red-600 hover:underline">
               {t("account.logout") ?? "Sign out"}
             </button>
           </div>
           {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+
+          {loading && orders === null && <p className="mt-8 text-center text-gray-400">…</p>}
 
           {orders !== null && orders.length === 0 && (
             <div className="card mt-4 p-8 text-center">
@@ -375,11 +431,11 @@ function AccountInner() {
               {profile && (
                 <div className="card mt-4 flex flex-wrap items-center gap-4 p-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-accent/10 text-lg font-bold text-brand-accent">
-                    {profile.name?.charAt(0)?.toUpperCase() ?? "?"}
+                    {(user.name || profile.name || "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-900">{profile.name}</div>
-                    <div className="text-sm text-gray-400">{profile.email}</div>
+                    <div className="font-semibold text-gray-900">{user.name || profile.name}</div>
+                    <div className="text-sm text-gray-400">{user.email}</div>
                   </div>
                   <div className="ml-auto text-right text-sm text-gray-500">
                     <div>{counts.all} {counts.all === 1 ? "order" : "orders"}</div>
@@ -407,114 +463,113 @@ function AccountInner() {
                 {shown.map((o) => {
                   const open = openId === o.id;
                   const reviewed = new Set(reviewsByOrder[o.id] ?? []);
-                  const unreviewedItems = o.status === "delivered" ? (o.items ?? []).filter((it) => !reviewed.has(it.productId)) : [];
-              return (
-                <div key={o.id} className="card overflow-hidden">
-                  <button className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-gray-50" onClick={() => setOpenId(open ? null : o.id)}>
-                    <div className="min-w-0">
-                      <div className="font-mono text-sm text-gray-900">{o.id}</div>
-                      <div className="mt-0.5 text-xs text-gray-400">{new Date(o.createdAt).toLocaleString()} · {o.items.reduce((s, i) => s + i.qty, 0)} items</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {o.returnRequested && o.returnStatus && o.returnStatus !== "none" && (
-                        <span className={`rounded px-2 py-0.5 text-xs ${RETURN_CLASS[o.returnStatus]}`}>{RETURN_LABEL[o.returnStatus]}</span>
+                  return (
+                    <div key={o.id} className="card overflow-hidden">
+                      <button className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-gray-50" onClick={() => setOpenId(open ? null : o.id)}>
+                        <div className="min-w-0">
+                          <div className="font-mono text-sm text-gray-900">{o.id}</div>
+                          <div className="mt-0.5 text-xs text-gray-400">{new Date(o.createdAt).toLocaleString()} · {o.items.reduce((s, i) => s + i.qty, 0)} items</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {o.returnRequested && o.returnStatus && o.returnStatus !== "none" && (
+                            <span className={`rounded px-2 py-0.5 text-xs ${RETURN_CLASS[o.returnStatus]}`}>{RETURN_LABEL[o.returnStatus]}</span>
+                          )}
+                          <span className={`rounded px-2 py-0.5 text-xs ${STATUS_CLASS[o.status]}`}>{STATUS_LABEL[o.status]}</span>
+                          <span className="font-bold text-gray-900">${Number(o.amountUSD).toFixed(2)}</span>
+                          <span className="text-gray-400">{open ? "▲" : "▼"}</span>
+                        </div>
+                      </button>
+
+                      {open && (
+                        <div className="space-y-4 border-t p-4">
+                          <Timeline order={o} />
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                              <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Items</div>
+                              <div className="space-y-2">
+                                {o.items.map((it) => {
+                                  const hasRev = reviewed.has(it.productId);
+                                  return (
+                                    <div key={it.productId} className="flex items-center gap-2 text-sm text-gray-700">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      {it.image && <img src={it.image} alt="" className="h-10 w-10 rounded object-cover" />}
+                                      <div className="flex-1">
+                                        <div className="truncate">{it.name[locale]}</div>
+                                        <div className="text-xs text-gray-400">× {it.qty} · ${it.priceUSD.toFixed(2)}</div>
+                                      </div>
+                                      <span>
+                                        {o.status === "delivered" ? (
+                                          hasRev ? (
+                                            <span className="text-xs text-green-600">✓ Reviewed</span>
+                                          ) : (
+                                            <button className="btn-primary px-3 py-1.5 text-xs" onClick={() => setReviewTarget({ order: o, item: it })}>
+                                              {t("account.reviewBtn") ?? "Review"}
+                                            </button>
+                                          )
+                                        ) : (
+                                          <span className="font-semibold">${(it.priceUSD * it.qty).toFixed(2)}</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Ship to</div>
+                              <div className="text-sm text-gray-700">
+                                <div>{o.customer?.name}</div>
+                                <div>{o.customer?.address}</div>
+                                <div>{o.customer?.city}{o.customer?.state ? `, ${o.customer.state}` : ""} {o.customer?.zip}</div>
+                                <div>{o.customer?.country}</div>
+                                {o.customer?.phone && <div className="mt-1 text-xs text-gray-400">{o.customer.phone}</div>}
+                              </div>
+                              <div className="mt-3 border-t pt-2 text-sm">
+                                <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>${(o.amountUSD - (o.shippingUSD ?? 0)).toFixed(2)}</span></div>
+                                <div className="flex justify-between text-gray-600"><span>Shipping</span><span>{o.shippingUSD === 0 ? "Free" : `$${(o.shippingUSD ?? 0).toFixed(2)}`}</span></div>
+                                <div className="flex justify-between font-bold text-gray-900"><span>Total</span><span>${Number(o.amountUSD).toFixed(2)}</span></div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* After-sales actions */}
+                          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                            {o.status === "delivered" && !o.returnRequested && (
+                              <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setReturnTarget(o)}>
+                                {t("account.returnBtn") ?? "Request return / after-sales"}
+                              </button>
+                            )}
+                            {o.returnRequested && o.returnStatus && (
+                              <span className={`rounded px-2 py-1 text-xs font-medium ${RETURN_CLASS[o.returnStatus]}`}>{RETURN_LABEL[o.returnStatus]}</span>
+                            )}
+                            {o.returnRequested && o.returnReason && o.returnStatus !== "none" && (
+                              <span className="text-xs text-gray-400">{o.returnReason}</span>
+                            )}
+                            <Link href={`/track?id=${o.id}`} className="ml-auto text-sm text-brand-accent hover:underline">
+                              {t("account.orderDetail") ?? "Track this order →"}
+                            </Link>
+                          </div>
+                        </div>
                       )}
-                      <span className={`rounded px-2 py-0.5 text-xs ${STATUS_CLASS[o.status]}`}>{STATUS_LABEL[o.status]}</span>
-                      <span className="font-bold text-gray-900">${Number(o.amountUSD).toFixed(2)}</span>
-                      <span className="text-gray-400">{open ? "▲" : "▼"}</span>
                     </div>
-                  </button>
-
-                  {open && (
-                    <div className="space-y-4 border-t p-4">
-                      <Timeline order={o} />
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Items</div>
-                          <div className="space-y-2">
-                            {o.items.map((it) => {
-                              const hasRev = reviewed.has(it.productId);
-                              return (
-                                <div key={it.productId} className="flex items-center gap-2 text-sm text-gray-700">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  {it.image && <img src={it.image} alt="" className="h-10 w-10 rounded object-cover" />}
-                                  <div className="flex-1">
-                                    <div className="truncate">{it.name[locale]}</div>
-                                    <div className="text-xs text-gray-400">× {it.qty} · ${it.priceUSD.toFixed(2)}</div>
-                                  </div>
-                                  <span>
-                                    {o.status === "delivered" ? (
-                                      hasRev ? (
-                                        <span className="text-xs text-green-600">✓ Reviewed</span>
-                                      ) : (
-                                        <button className="btn-primary px-3 py-1.5 text-xs" onClick={() => setReviewTarget({ order: o, item: it })}>
-                                          {t("account.reviewBtn") ?? "Review"}
-                                        </button>
-                                      )
-                                    ) : (
-                                      <span className="font-semibold">${(it.priceUSD * it.qty).toFixed(2)}</span>
-                                    )}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 text-xs font-semibold uppercase text-gray-400">Ship to</div>
-                          <div className="text-sm text-gray-700">
-                            <div>{o.customer?.name}</div>
-                            <div>{o.customer?.address}</div>
-                            <div>{o.customer?.city}{o.customer?.state ? `, ${o.customer.state}` : ""} {o.customer?.zip}</div>
-                            <div>{o.customer?.country}</div>
-                            {o.customer?.phone && <div className="mt-1 text-xs text-gray-400">{o.customer.phone}</div>}
-                          </div>
-                          <div className="mt-3 border-t pt-2 text-sm">
-                            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>${(o.amountUSD - (o.shippingUSD ?? 0)).toFixed(2)}</span></div>
-                            <div className="flex justify-between text-gray-600"><span>Shipping</span><span>{o.shippingUSD === 0 ? "Free" : `$${(o.shippingUSD ?? 0).toFixed(2)}`}</span></div>
-                            <div className="flex justify-between font-bold text-gray-900"><span>Total</span><span>${Number(o.amountUSD).toFixed(2)}</span></div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* After-sales actions */}
-                      <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                        {o.status === "delivered" && !o.returnRequested && (
-                          <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setReturnTarget(o)}>
-                            {t("account.returnBtn") ?? "Request return / after-sales"}
-                          </button>
-                        )}
-                        {o.returnRequested && o.returnStatus && (
-                          <span className={`rounded px-2 py-1 text-xs font-medium ${RETURN_CLASS[o.returnStatus]}`}>{RETURN_LABEL[o.returnStatus]}</span>
-                        )}
-                        {o.returnRequested && o.returnReason && o.returnStatus !== "none" && (
-                          <span className="text-xs text-gray-400">{o.returnReason}</span>
-                        )}
-                        <Link href={`/track?id=${o.id}`} className="ml-auto text-sm text-brand-accent hover:underline">
-                          {t("account.orderDetail") ?? "Track this order →"}
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
 
-      {reviewTarget && <ReviewModal order={reviewTarget.order} item={reviewTarget.item} onClose={() => setReviewTarget(null)} onDone={() => lookup(searchedFor)} />}
-      {returnTarget && <ReturnModal order={returnTarget} onClose={() => setReturnTarget(null)} onDone={() => lookup(searchedFor)} />}
+      {reviewTarget && <ReviewModal order={reviewTarget.order} item={reviewTarget.item} onClose={() => setReviewTarget(null)} onDone={() => user ? lookup(user.email) : lookup(searchedFor)} />}
+      {returnTarget && <ReturnModal order={returnTarget} onClose={() => setReturnTarget(null)} onDone={() => user ? lookup(user.email) : lookup(searchedFor)} />}
     </div>
   );
 }
 
 export default function AccountPage() {
   return (
-    <Suspense fallback={<div className="container-page py-24 text-center text-gray-500">…</div>}>
+    <Suspense fallback={<div className="container-page py-24 text-center text-gray-400">…</div>}>
       <AccountInner />
     </Suspense>
   );

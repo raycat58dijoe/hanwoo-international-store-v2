@@ -1,6 +1,6 @@
 import { SEED_PRODUCTS } from "./seed";
 import { queryWithSchema } from "./neon-client";
-import type { Order, Product, Review } from "./types";
+import type { Order, Product, Review, User } from "./types";
 
 const CONNECTION_STRING = process.env.POSTGRES_URL;
 const USE_DB = Boolean(CONNECTION_STRING);
@@ -37,6 +37,7 @@ function rowToOrder(r: any): Order {
     items: typeof r.items === "string" ? JSON.parse(r.items) : r.items || [],
     amountUSD: Number(r.amount_usd),
     currency: r.currency,
+    userId: r.user_id ?? undefined,
     customer: typeof r.customer === "string" ? JSON.parse(r.customer) : r.customer,
     status: r.status,
     paymentMethod: (r.payment_method as Order["paymentMethod"]) || "stripe",
@@ -108,8 +109,8 @@ export async function createOrder(o: Order): Promise<Order> {
   if (!neon) { memOrders.push(o); return o; }
   try {
     await neon.queryWithSchema(
-      `INSERT INTO orders (id,items,amount_usd,currency,customer,status,payment_method,zelle_confirmed,stripe_session_id,shipping_usd,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.shippingUSD ?? 0, o.createdAt]
+      `INSERT INTO orders (id,items,amount_usd,currency,customer,user_id,status,payment_method,zelle_confirmed,stripe_session_id,shipping_usd,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [o.id, JSON.stringify(o.items), o.amountUSD, o.currency, JSON.stringify(o.customer), o.userId ?? null, o.status, o.paymentMethod ?? "stripe", o.zelleConfirmed ?? false, o.stripeSessionId ?? null, o.shippingUSD ?? 0, o.createdAt]
     );
     return o;
   } catch (e: any) {
@@ -296,6 +297,84 @@ export async function deleteReview(id: string): Promise<boolean> {
     } catch { /* fall through */ }
     return false;
   }
+}
+
+/* ---------- auth: users & sessions ---------- */
+let memUsers: User[] = [];
+let memSessions: { token: string; userId: string; expiresAt: string }[] = [];
+
+export async function createUser(u: User): Promise<User> {
+  const neon = await getNeon();
+  if (!neon) { memUsers.push(u); return u; }
+  try {
+    await neon.queryWithSchema(
+      `INSERT INTO users (id,email,password_hash,name,created_at) VALUES ($1,$2,$3,$4,$5)`,
+      [u.id, u.email, u.passwordHash, u.name, u.createdAt]
+    );
+    return u;
+  } catch (e: any) {
+    console.error("[createUser] failed:", e?.message);
+    if (String(e?.message ?? "").toLowerCase().includes("duplicate")) throw new Error("EMAIL_TAKEN");
+    memUsers.push(u);
+    return u;
+  }
+}
+
+export async function findUserByEmail(email: string): Promise<User | undefined> {
+  const e = email.trim().toLowerCase();
+  const neon = await getNeon();
+  if (!neon) return memUsers.find((u) => u.email === e);
+  try {
+    const rows = await neon.queryWithSchema("SELECT * FROM users WHERE email = $1", [e]);
+    return rows[0] ? rowToUser(rows[0]) : undefined;
+  } catch {
+    return memUsers.find((u) => u.email === e);
+  }
+}
+
+function rowToUser(r: any): User {
+  return { id: r.id, email: r.email, passwordHash: r.password_hash, name: r.name ?? "", createdAt: r.created_at };
+}
+
+export async function createSession(token: string, userId: string, expiresAt: string): Promise<void> {
+  const neon = await getNeon();
+  if (!neon) { memSessions.push({ token, userId, expiresAt }); return; }
+  try {
+    await neon.queryWithSchema(
+      `INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)`,
+      [token, userId, new Date().toISOString(), expiresAt]
+    );
+  } catch (e: any) {
+    console.error("[createSession] failed:", e?.message);
+    memSessions.push({ token, userId, expiresAt });
+  }
+}
+
+export async function getUserBySessionToken(token: string): Promise<User | null> {
+  if (!token) return null;
+  const now = Date.now();
+  const neon = await getNeon();
+  if (!neon) {
+    const s = memSessions.find((x) => x.token === token && new Date(x.expiresAt).getTime() > now);
+    if (!s) return null;
+    return memUsers.find((u) => u.id === s.userId) ?? null;
+  }
+  try {
+    const rows = await neon.queryWithSchema(
+      "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1 AND s.expires_at > $2",
+      [token, new Date(now).toISOString()]
+    );
+    return rows[0] ? rowToUser(rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteSession(token: string): Promise<void> {
+  const neon = await getNeon();
+  if (!neon) { memSessions = memSessions.filter((s) => s.token !== token); return; }
+  try { await neon.queryWithSchema("DELETE FROM sessions WHERE token = $1", [token]); }
+  catch (e: any) { console.error("[deleteSession] failed:", e?.message); }
 }
 
 export function genId(prefix: string): string {
