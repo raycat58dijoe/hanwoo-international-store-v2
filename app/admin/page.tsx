@@ -59,7 +59,8 @@ const LOW_STOCK_THRESHOLD = 5;
 
 export default function AdminPage() {
   const { t } = useI18n();
-  const [key, setKey] = useState(() => typeof window !== "undefined" ? (localStorage.getItem("adminKey") ?? "") : "");
+  const [key, setKey] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
   const [tab, setTab] = useState<"dashboard" | "products" | "orders">("dashboard");
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<FormState | null>(null);
@@ -76,9 +77,9 @@ export default function AdminPage() {
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (key) { load(); loadOrders(); }
+    if (authenticated) { load(); loadOrders(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [authenticated]);
 
   async function load() {
     try {
@@ -101,13 +102,13 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (!key) return;
+    if (!authenticated) return;
     if (tab === "orders" || tab === "dashboard") {
       loadOrders();
       load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, key]);
+  }, [tab, authenticated]);
 
   async function saveKey() {
     setMsg("");
@@ -120,8 +121,7 @@ export default function AdminPage() {
       return;
     }
     localStorage.setItem("adminKey", key);
-    load();
-    loadOrders();
+    setAuthenticated(true);
   }
 
   // ---------- product operations ----------
@@ -397,7 +397,7 @@ export default function AdminPage() {
     return <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">{t("admin.inStock")} {p.inventory}</span>;
   }
 
-  if (!key) {
+  if (!authenticated) {
     return (
       <div className="container-page max-w-md py-16">
         <h1 className="text-2xl font-bold text-gray-900">{t("admin.title")}</h1>
