@@ -19,12 +19,12 @@ export async function POST(req: NextRequest) {
   }
 
   const token = newSessionToken();
-  await createSession(token, user.id, sessionExpiry());
+  const sessionError = await createSession(token, user.id, sessionExpiry());
 
   const res = NextResponse.json({
     ok: true,
     user: { id: user.id, email: user.email, name: user.name },
-    debug: { tokenLen: token.length, sessionFound: !!(await getUserBySessionToken(token)) },
+    debug: { sessionError },
   });
   res.headers.set("Set-Cookie", sessionCookieHeader(token));
   return res;

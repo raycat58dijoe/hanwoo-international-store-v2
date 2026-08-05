@@ -336,17 +336,19 @@ function rowToUser(r: any): User {
   return { id: r.id, email: r.email, passwordHash: r.password_hash, name: r.name ?? "", createdAt: r.created_at };
 }
 
-export async function createSession(token: string, userId: string, expiresAt: string): Promise<void> {
+export async function createSession(token: string, userId: string, expiresAt: string): Promise<string | null> {
   const neon = await getNeon();
-  if (!neon) { memSessions.push({ token, userId, expiresAt }); return; }
+  if (!neon) { memSessions.push({ token, userId, expiresAt }); return null; }
   try {
     await neon.queryWithSchema(
       `INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)`,
       [token, userId, new Date().toISOString(), expiresAt]
     );
+    return null;
   } catch (e: any) {
     console.error("[createSession] failed:", e?.message);
     memSessions.push({ token, userId, expiresAt });
+    return e?.message ?? "unknown";
   }
 }
 
