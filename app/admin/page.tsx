@@ -102,10 +102,6 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (saved) { load(); loadOrders(); }
-  }, []);
-
-  useEffect(() => {
     if (!key) return;
     if (tab === "orders" || tab === "dashboard") {
       loadOrders();
