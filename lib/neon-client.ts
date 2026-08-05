@@ -10,8 +10,10 @@ async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
   if (!CONN_STR) throw new Error("POSTGRES_URL not set");
 
   let lastErr: unknown;
-  // Retry transient Neon HTTP /sql failures (free-tier rate limits, cold starts).
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Retry transient Neon HTTP /sql failures (free-tier rate limits, cold starts,
+  // spurious "password authentication failed (retryable)"). Exponential backoff
+  // with jitter — 5 attempts ≈ 0.3/0.7/1.5/3/3s.
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const res = await fetch("https://" + new URL(CONN_STR).hostname + "/sql", {
         method: "POST",
@@ -31,7 +33,10 @@ async function query<T = any>(sql: string, params?: unknown[]): Promise<T[]> {
       return data.rows ?? data ?? [];
     } catch (e) {
       lastErr = e;
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+      if (attempt < 4) {
+        const wait = Math.min(3000, 300 * 2 ** attempt) + Math.floor(Math.random() * 150);
+        await new Promise((r) => setTimeout(r, wait));
+      }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

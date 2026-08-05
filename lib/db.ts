@@ -336,19 +336,17 @@ function rowToUser(r: any): User {
   return { id: r.id, email: r.email, passwordHash: r.password_hash, name: r.name ?? "", createdAt: r.created_at };
 }
 
-export async function createSession(token: string, userId: string, expiresAt: string): Promise<string | null> {
+export async function createSession(token: string, userId: string, expiresAt: string): Promise<void> {
   const neon = await getNeon();
-  if (!neon) { memSessions.push({ token, userId, expiresAt }); return null; }
+  if (!neon) { memSessions.push({ token, userId, expiresAt }); return; }
   try {
     await neon.queryWithSchema(
       `INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)`,
       [token, userId, new Date().toISOString(), expiresAt]
     );
-    return null;
   } catch (e: any) {
     console.error("[createSession] failed:", e?.message);
     memSessions.push({ token, userId, expiresAt });
-    return e?.message ?? "unknown";
   }
 }
 
@@ -377,24 +375,6 @@ export async function deleteSession(token: string): Promise<void> {
   if (!neon) { memSessions = memSessions.filter((s) => s.token !== token); return; }
   try { await neon.queryWithSchema("DELETE FROM sessions WHERE token = $1", [token]); }
   catch (e: any) { console.error("[deleteSession] failed:", e?.message); }
-}
-
-/* DIAGNOSTIC probe — temporarily exported for auth debugging. */
-export async function __neonProbe(token: string) {
-  const neon = await getNeon();
-  if (!neon) return { mode: "memory" };
-  const tryQuery = async (label: string, sql: string, params?: unknown[]) => {
-    try { await neon.queryWithSchema(sql, params); return label + ":OK"; }
-    catch (e: any) { return label + ":" + (e?.message ?? "").slice(0, 90); }
-  };
-  return {
-    selectUsers: await tryQuery("users", "SELECT COUNT(*) FROM users"),
-    selectProducts: await tryQuery("products", "SELECT COUNT(*) FROM products"),
-    selectSessions: await tryQuery("sessions", "SELECT COUNT(*) FROM sessions"),
-    selectReviews: await tryQuery("reviews", "SELECT COUNT(*) FROM reviews"),
-    selectNonexistent: await tryQuery("nope", "SELECT COUNT(*) FROM table_does_not_exist_xyz"),
-    insertSessions: await tryQuery("insert-s", "INSERT INTO sessions (token,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)", ["probe-" + token.slice(0, 12), "probe", new Date().toISOString(), new Date().toISOString()]),
-  };
 }
 
 export function genId(prefix: string): string {
