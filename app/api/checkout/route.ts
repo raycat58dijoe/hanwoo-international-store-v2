@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProductById, createOrder, updateOrder, genId } from "@/lib/db";
+import { getProductById, createOrder, updateOrder, generateOrderId } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
 import { calcShippingUSD } from "@/lib/shipping";
 import { verifyToken, SESSION_COOKIE } from "@/lib/auth";
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const signedInUser = verifyToken(req.cookies.get(SESSION_COOKIE)?.value);
 
     const order: Order = {
-      id: genId("ord"),
+      id: generateOrderId(),
       items: orderItems,
       amountUSD,
       currency,

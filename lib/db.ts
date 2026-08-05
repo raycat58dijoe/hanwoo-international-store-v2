@@ -381,3 +381,11 @@ export async function deleteSession(token: string): Promise<void> {
 export function genId(prefix: string): string {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
+
+/** Amazon-style order number: 114-1234567-1234567 */
+export function generateOrderId(): string {
+  const p1 = 100 + Math.floor(Math.random() * 900);           // 100-999
+  const p2 = 1000000 + Math.floor(Math.random() * 9000000);    // 1000000-9999999
+  const p3 = 1000000 + Math.floor(Math.random() * 9000000);
+  return `${p1}-${p2}-${p3}`;
+}
