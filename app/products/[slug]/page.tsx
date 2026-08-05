@@ -5,6 +5,8 @@ import { ProductView } from "@/components/ProductView";
 
 const SITE_URL = "https://hanwoointernationalinc.net";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params,
 }: {
